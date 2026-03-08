@@ -1,0 +1,18 @@
+{
+  "name": "immologik",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n api,web \"pnpm run dev:api\" \"pnpm run dev:web\"",
+    "dev:api": "dotenv -e .env -- pnpm --dir apps/api start:dev",
+    "dev:web": "pnpm --dir apps/web run dev",
+    "build": "pnpm --dir apps/api build && pnpm --dir apps/web build",
+    "lint": "pnpm --dir apps/api lint && pnpm --dir apps/web lint",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1",
+    "dotenv-cli": "^11.0.0"
+  }
+}
