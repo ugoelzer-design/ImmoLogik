@@ -68,3 +68,45 @@ model Document {
 
   @@map("documents")
 }
+model RentUnit {
+  id              String   @id @default(cuid())
+  objectId        String
+  unitLabel       String
+  tenant          String
+  sollMiete       Float
+  istMiete        Float    @default(0)
+  zahlungsStatus  String   @default("Offen")
+  faelligAm      String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("rent_units")
+}
+
+model Mieter {
+  id         String   @id @default(cuid())
+  fullName   String
+  objectName String
+  unit       String
+  email      String
+  phone      String
+  status     String   @default("Aktiv")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("mieter")
+}
+
+model Vertrag {
+  id         String   @id @default(cuid())
+  title      String
+  objectName String
+  tenantName String
+  startDate  String
+  endDate    String
+  status     String   @default("Aktiv")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("vertraege")
+}
