@@ -7,11 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum InternalRole {
-  ADMIN
-  EMPLOYEE
-}
-
 model Tenant {
   id        String   @id @default(cuid())
   name      String
@@ -19,8 +14,7 @@ model Tenant {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  users User[]
+  users     User[]
 }
 
 model User {
@@ -29,12 +23,10 @@ model User {
   displayName String
   role        InternalRole @default(EMPLOYEE)
   isActive    Boolean      @default(true)
-
-  tenantId String
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  tenantId    String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
 }
@@ -48,7 +40,7 @@ model PropertyObject {
   status            String
   units             Int      @default(1)
   occupancy         String   @default("0%")
-  monthlyTargetRent String   @default("0 €")
+  monthlyTargetRent String   @default("0 â‚¬")
   note              String
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -57,28 +49,34 @@ model PropertyObject {
 }
 
 model Document {
-  id         String   @id @default(cuid())
-  title      String
-  fileName   String
-  mimeType   String
-  size       Int
-  storageKey String   @unique
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String   @id @default(cuid())
+  title       String
+  fileName    String
+  mimeType    String
+  size        Int
+  storageKey  String   @unique
+  objectId    String?
+  objectName  String?
+  category    String   @default("Sonstiges")
+  status      String   @default("Vorhanden")
+  uploadedBy  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@map("documents")
 }
+
 model RentUnit {
-  id              String   @id @default(cuid())
-  objectId        String
-  unitLabel       String
-  tenant          String
-  sollMiete       Float
-  istMiete        Float    @default(0)
-  zahlungsStatus  String   @default("Offen")
+  id             String   @id @default(cuid())
+  objectId       String
+  unitLabel      String
+  tenant         String
+  sollMiete      Float
+  istMiete       Float    @default(0)
+  zahlungsStatus String   @default("Offen")
   faelligAm      String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@map("rent_units")
 }
@@ -109,4 +107,9 @@ model Vertrag {
   updatedAt  DateTime @updatedAt
 
   @@map("vertraege")
+}
+
+enum InternalRole {
+  ADMIN
+  EMPLOYEE
 }

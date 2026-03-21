@@ -9,18 +9,27 @@ export class MinioService implements OnModuleInit {
 
   async onModuleInit() {
     this.bucket = process.env.S3_BUCKET || "immologik-local";
+    const endpoint = process.env.S3_ENDPOINT || "http://localhost:9000";
+    const hostOnly = endpoint.replace(/^https?:\/\//, "").replace(/:\d+$/, "");
+    const port = parseInt(process.env.MINIO_PORT || "9000");
+    const useSSL = endpoint.startsWith("https");
+
     this.client = new Minio.Client({
-      endPoint: (process.env.S3_ENDPOINT || "http://localhost:9000").replace(/^https?:\/\//, ""),
-      port: parseInt(process.env.MINIO_PORT || "9000"),
-      useSSL: false,
+      endPoint: hostOnly,
+      port,
+      useSSL,
       accessKey: process.env.S3_ACCESS_KEY || "minioadmin",
       secretKey: process.env.S3_SECRET_KEY || "minioadmin",
     });
 
-    const exists = await this.client.bucketExists(this.bucket);
-    if (!exists) {
-      await this.client.makeBucket(this.bucket, process.env.S3_REGION || "us-east-1");
-      this.logger.log(`Bucket "${this.bucket}" erstellt.`);
+    try {
+      const exists = await this.client.bucketExists(this.bucket);
+      if (!exists) {
+        await this.client.makeBucket(this.bucket, process.env.S3_REGION || "us-east-1");
+        this.logger.log(`Bucket "${this.bucket}" erstellt.`);
+      }
+    } catch (err) {
+      this.logger.warn(`MinIO nicht erreichbar: ${err}`);
     }
   }
 
@@ -34,16 +43,8 @@ export class MinioService implements OnModuleInit {
     }
   }
 
-  async uploadFile(
-    storageKey: string,
-    buffer: Buffer,
-    mimeType: string,
-    metadata?: Record<string, string>,
-  ): Promise<void> {
-    await this.client.putObject(this.bucket, storageKey, buffer, buffer.length, {
-      "Content-Type": mimeType,
-      ...metadata,
-    });
+  async uploadFile(storageKey: string, buffer: Buffer, mimeType: string, metadata?: Record<string, string>): Promise<void> {
+    await this.client.putObject(this.bucket, storageKey, buffer, buffer.length, { "Content-Type": mimeType, ...metadata });
   }
 
   async getPresignedUrl(storageKey: string, expirySeconds = 3600): Promise<string> {
@@ -52,17 +53,5 @@ export class MinioService implements OnModuleInit {
 
   async deleteFile(storageKey: string): Promise<void> {
     await this.client.removeObject(this.bucket, storageKey);
-  }
-
-  async listObjectFiles(objectId: string): Promise<string[]> {
-    const keys: string[] = [];
-    const stream = this.client.listObjectsV2(this.bucket, `wegs/`, true);
-    return new Promise((resolve, reject) => {
-      stream.on("data", (obj) => {
-        if (obj.name && obj.name.includes(objectId)) keys.push(obj.name);
-      });
-      stream.on("end", () => resolve(keys));
-      stream.on("error", reject);
-    });
   }
 }
