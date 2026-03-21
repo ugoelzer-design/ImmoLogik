@@ -1,15 +1,15 @@
-﻿export type ImmoDocumentCategory =
-  | "Mietvertrag"
-  | "Nebenkosten"
-  | "Protokoll"
-  | "Rechnung"
-  | "Sonstiges";
-
 export type ImmoDocument = {
   id: string;
   title: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  objectId: string | null;
   objectName: string;
-  category: ImmoDocumentCategory;
-  status: "Vorhanden" | "Fehlt" | "In Prüfung";
+  category: string;
+  status: string;
+  uploadedBy: string | null;
+  downloadUrl: string | null;
+  createdAt: string;
   updatedAt: string;
 };

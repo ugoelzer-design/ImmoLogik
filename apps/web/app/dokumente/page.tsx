@@ -1,13 +1,22 @@
-﻿import { AdminShell } from "@/components/layout/admin-shell";
+import { AdminShell } from "@/components/layout/admin-shell";
 import { DocumentsModule } from "@/features/documents/components/documents-module";
 import { getDocuments } from "@/features/documents/services/documents.service";
 
-export default async function DokumentePage() {
-  const documents = await getDocuments();
+async function getObjects() {
+  try {
+    const res = await fetch("http://localhost:3000/objects", { cache: "no-store" });
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
+}
 
+export default async function DokumentePage() {
+  const [documents, objects] = await Promise.all([getDocuments(), getObjects()]);
   return (
     <AdminShell>
-      <DocumentsModule documents={documents} />
+      <DocumentsModule initialDocuments={documents} objects={objects} />
     </AdminShell>
   );
 }

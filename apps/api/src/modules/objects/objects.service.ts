@@ -1,3 +1,4 @@
+import { MinioService } from '../documents/minio.service';
 import {
   BadRequestException,
   Injectable,
@@ -8,7 +9,7 @@ import { CreateObjectDto } from './dto/create-object.dto';
 
 @Injectable()
 export class ObjectsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly minio: MinioService) {}
 
   findAll() {
     return this.prisma.propertyObject.findMany({
@@ -42,7 +43,7 @@ export class ObjectsService {
 
     if (!Number.isInteger(units) || units < 1) {
       throw new BadRequestException(
-        'Einheiten müssen als ganze Zahl ab 1 übergeben werden.',
+        'Einheiten mÃ¼ssen als ganze Zahl ab 1 Ã¼bergeben werden.',
       );
     }
 
@@ -57,8 +58,8 @@ export class ObjectsService {
         status: 'Neu',
         units,
         occupancy: '0%',
-        monthlyTargetRent: '0 €',
-        note: 'Neu angelegtes Objekt. Weitere Daten folgen im nächsten Schritt.',
+        monthlyTargetRent: '0 â‚¬',
+        note: 'Neu angelegtes Objekt. Weitere Daten folgen im nÃ¤chsten Schritt.',
       },
     });
   }
