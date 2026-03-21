@@ -1,4 +1,4 @@
-﻿type QueryValue = string | number | boolean | null | undefined;
+type QueryValue = string | number | boolean | null | undefined;
 
 type RequestOptions = RequestInit & {
   query?: Record<string, QueryValue>;
@@ -24,13 +24,15 @@ function buildUrl(path: string, query?: Record<string, QueryValue>) {
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { query, headers, ...init } = options;
+  const requestHeaders = new Headers(headers ?? undefined);
+
+  if (init.body !== undefined && !requestHeaders.has("Content-Type")) {
+    requestHeaders.set("Content-Type", "application/json");
+  }
 
   const response = await fetch(buildUrl(path, query), {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(headers ?? {}),
-    },
+    headers: requestHeaders,
     cache: "no-store",
   });
 
@@ -43,7 +45,13 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     return undefined as T;
   }
 
-  return (await response.json()) as T;
+  const responseText = await response.text();
+
+  if (!responseText.trim()) {
+    return undefined as T;
+  }
+
+  return JSON.parse(responseText) as T;
 }
 
 export const apiClient = {

@@ -1,25 +1,46 @@
-﻿import { Injectable } from '@nestjs/common';
+﻿import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class DocumentsService {
-  private readonly documents = [
-    {
-      id: 'doc-1',
-      title: 'Mietvertrag Muster',
-      fileName: 'mietvertrag-muster.pdf',
-      mimeType: 'application/pdf',
-      size: 245760,
-      storageKey: 'documents/mietvertrag-muster.pdf',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-  ];
+  constructor(private readonly prisma: PrismaService) {}
 
-  findAll() {
-    return this.documents;
+  private mapDocument(document: {
+    id: string;
+    title: string;
+    updatedAt: Date;
+  }) {
+    return {
+      id: document.id,
+      title: document.title,
+      objectName: 'Allgemein',
+      category: 'Sonstiges',
+      status: 'Vorhanden',
+      updatedAt: new Intl.DateTimeFormat('de-DE').format(
+        new Date(document.updatedAt),
+      ),
+    };
   }
 
-  findOne(id: string) {
-    return this.documents.find((document) => document.id === id) ?? null;
+  async findAll() {
+    const documents = await this.prisma.document.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return documents.map((document) => this.mapDocument(document));
+  }
+
+  async findOne(id: string) {
+    const document = await this.prisma.document.findUnique({
+      where: { id },
+    });
+
+    if (!document) {
+      throw new NotFoundException('Dokument nicht gefunden.');
+    }
+
+    return this.mapDocument(document);
   }
 }

@@ -1,12 +1,9 @@
 ﻿import { SectionCard } from "@/components/ui/section-card";
 import { StatCard } from "@/components/ui/stat-card";
 
-const stats = [
-  { label: "Objekte", value: 12, hint: "2 neu in Prüfung" },
-  { label: "Mieter", value: 38, hint: "35 aktiv, 3 ausstehend" },
-  { label: "Verträge", value: 34, hint: "4 laufen bald aus" },
-  { label: "Dokumente", value: 286, hint: "14 neue Uploads" },
-];
+type DashboardOverviewProps = {
+  objectCount: number;
+};
 
 const tasks = [
   "Nebenkostenunterlagen für Objekt Bergstraße prüfen",
@@ -15,18 +12,25 @@ const tasks = [
 ];
 
 const activities = [
-  "Neues Objekt „Rosenweg 8“ angelegt",
+  "Neue WEG angelegt",
   "Mietvertrag für Einheit A-03 aktualisiert",
-  "Drei Dokumente dem Objekt Hafenstraße zugeordnet",
+  "Drei Dokumente einer WEG zugeordnet",
 ];
 
-export function DashboardOverview() {
+export function DashboardOverview({ objectCount }: DashboardOverviewProps) {
+  const stats = [
+    { label: "WEGs", value: objectCount, hint: "Aktueller Bestand" },
+    { label: "Mieter", value: 38, hint: "35 aktiv, 3 ausstehend" },
+    { label: "Verträge", value: 34, hint: "4 laufen bald aus" },
+    { label: "Dokumente", value: 286, hint: "14 neue Uploads" },
+  ];
+
   return (
     <section className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="mt-1 text-sm text-zinc-600">
-          Operative Übersicht für Immobilien, Verträge, Mieter und Dokumente.
+          Operative Übersicht für WEGs, Verträge, Mieter und Dokumente.
         </p>
       </div>
 

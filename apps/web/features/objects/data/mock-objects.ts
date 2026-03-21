@@ -1,8 +1,9 @@
-import type { ImmoObject } from "@/types/object";
+﻿import type { ImmoObject } from "@/types/object";
 
 export const mockObjects: ImmoObject[] = [
   {
     id: "obj-1",
+    displayId: "WEG-001",
     name: "Bergstraße 12",
     address: "Bergstraße 12, 40213 Düsseldorf",
     type: "Mehrfamilienhaus",
@@ -14,6 +15,7 @@ export const mockObjects: ImmoObject[] = [
   },
   {
     id: "obj-2",
+    displayId: "WEG-002",
     name: "Rheinallee 5",
     address: "Rheinallee 5, 40545 Düsseldorf",
     type: "Wohn- und Geschäftshaus",
@@ -25,6 +27,7 @@ export const mockObjects: ImmoObject[] = [
   },
   {
     id: "obj-3",
+    displayId: "WEG-003",
     name: "Hafenstraße 21",
     address: "Hafenstraße 21, 41460 Neuss",
     type: "Wohnobjekt",

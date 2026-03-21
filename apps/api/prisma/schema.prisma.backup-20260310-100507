@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+enum InternalRole {
+  ADMIN
+  EMPLOYEE
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users User[]
+}
+
+model User {
+  id          String       @id @default(cuid())
+  email       String       @unique
+  displayName String
+  role        InternalRole @default(EMPLOYEE)
+  isActive    Boolean      @default(true)
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+model PropertyObject {
+  id                String   @id @default(cuid())
+  displayId         String   @unique
+  name              String
+  address           String
+  type              String
+  status            String
+  units             Int      @default(1)
+  occupancy         String   @default("0%")
+  monthlyTargetRent String   @default("0 ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬")
+  note              String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("objects")
+}
+model Document {
+  id         String   @id @default(cuid())
+  title      String
+  fileName   String
+  mimeType   String
+  size       Int
+  storageKey String   @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("documents")
+}
+
