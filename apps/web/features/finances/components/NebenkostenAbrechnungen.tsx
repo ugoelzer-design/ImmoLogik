@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -2852,7 +2852,28 @@ export function NebenkostenAbrechnungen() {
                 </p>
               </div>
 
-              <NebenkostenEinzelreportBatch reports={finalerEinzelreportBatch} />
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById("finaler-report-batch");
+                    if (!el) return;
+                    const w = window.open("", "_blank", "width=900,height=700");
+                    if (!w) return;
+                    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Nebenkostenabrechnungen</title><style>body{font-family:Arial,sans-serif;padding:20mm;color:#111827;}table{width:100%;border-collapse:collapse;}td,th{padding:8px;border-bottom:1px solid #d1d5db;text-align:left;}@media print{body{padding:10mm;}}</style></head><body>${el.innerHTML}</body></html>`);
+                    w.document.close();
+                    w.focus();
+                    w.print();
+                    w.close();
+                  }}
+                  className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 transition"
+                >
+                  🖨 Alle drucken
+                </button>
+              </div>
+              <div id="finaler-report-batch">
+                <NebenkostenEinzelreportBatch reports={finalerEinzelreportBatch} />
+              </div>
             </section>
           ) : null}
         </section>
