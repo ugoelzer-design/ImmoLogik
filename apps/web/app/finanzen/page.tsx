@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getDocuments } from "../../features/documents/services/documents.service";
 import { NebenkostenAbrechnungen } from "../../features/finances/components/NebenkostenAbrechnungen";
 import { NebenkostenOverview } from "../../features/finances/components/NebenkostenOverview";
 import { MietuebersichtModule } from "../../features/finances/components/MietuebersichtModule";
@@ -35,6 +36,11 @@ function PlaceholderCard({ title, text }: { title: string; text: string }) {
 export default function FinanzenPage() {
   const [activeSection, setActiveSection] = useState<FinanceSectionId>("nebenkosten");
   const [activeNebenkostenTab, setActiveNebenkostenTab] = useState<NebenkostenTabId>("abrechnungen");
+  const [documents, setDocuments] = useState<Awaited<ReturnType<typeof getDocuments>>>([]);
+
+  useEffect(() => {
+    void getDocuments().then(setDocuments).catch(() => setDocuments([]));
+  }, []);
 
   const currentSection = useMemo(() => financeSections.find((s) => s.id === activeSection), [activeSection]);
 
@@ -76,7 +82,7 @@ export default function FinanzenPage() {
                 </div>
               </section>
               {activeNebenkostenTab === "uebersicht" ? <NebenkostenOverview /> : null}
-              {activeNebenkostenTab === "abrechnungen" ? <NebenkostenAbrechnungen /> : null}
+              {activeNebenkostenTab === "abrechnungen" ? <NebenkostenAbrechnungen documents={documents} /> : null}
             </div>
           ) : null}
 

@@ -32,81 +32,218 @@ model User {
 }
 
 model PropertyObject {
-  id                String   @id @default(cuid())
-  displayId         String   @unique
+  id                String    @id @default(cuid())
+  displayId         String    @unique
   name              String
   address           String
   type              String
   status            String
-  units             Int      @default(1)
-  occupancy         String   @default("0%")
-  monthlyTargetRent String   @default("0 â‚¬")
+  units             Int       @default(1)
+  occupancy         String    @default("0%")
+  monthlyTargetRent String    @default("0 €")
   note              String
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  documents         Document[]
+  rentUnits         RentUnit[]
+  mieter            Mieter[]
+  vertraege         Vertrag[]
+  meters            Meter[]
+  readingCampaigns  ReadingCampaign[]
+  utilityStatements UtilityStatement[]
 
   @@map("objects")
 }
 
 model Document {
-  id          String   @id @default(cuid())
-  title       String
-  fileName    String
-  mimeType    String
-  size        Int
-  storageKey  String   @unique
-  objectId    String?
-  objectName  String?
-  category    String   @default("Sonstiges")
-  status      String   @default("Vorhanden")
-  uploadedBy  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String          @id @default(cuid())
+  title      String
+  fileName   String
+  mimeType   String
+  size       Int
+  storageKey String          @unique
+  objectId   String?
+  objectName String?
+  rentUnitId String?
+  unitLabel  String?
+  reportYear Int?
+  category   String          @default("Sonstiges")
+  status     String          @default("Vorhanden")
+  uploadedBy String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  object     PropertyObject? @relation(fields: [objectId], references: [id], onDelete: SetNull)
 
+  @@index([objectId])
   @@map("documents")
 }
 
 model RentUnit {
-  id             String   @id @default(cuid())
+  id             String         @id @default(cuid())
   objectId       String
   unitLabel      String
   tenant         String
   sollMiete      Float
-  istMiete       Float    @default(0)
-  zahlungsStatus String   @default("Offen")
+  istMiete       Float          @default(0)
+  zahlungsStatus String         @default("Offen")
   faelligAm      String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  object         PropertyObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  mieter         Mieter[]
+  vertraege      Vertrag[]
+  meters         Meter[]
+  readingAccess  ReadingAccess[]
 
+  @@index([objectId])
   @@map("rent_units")
 }
 
 model Mieter {
-  id         String   @id @default(cuid())
+  id         String         @id @default(cuid())
+  objectId   String
+  rentUnitId String
   fullName   String
-  objectName String
-  unit       String
   email      String
   phone      String
-  status     String   @default("Aktiv")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  status     String         @default("Aktiv")
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  object     PropertyObject @relation(fields: [objectId], references: [id], onDelete: Restrict)
+  rentUnit   RentUnit       @relation(fields: [rentUnitId], references: [id], onDelete: Restrict)
+  vertraege  Vertrag[]
+  readingAccess ReadingAccess[]
 
+  @@index([objectId])
+  @@index([rentUnitId])
+  @@unique([objectId, rentUnitId])
   @@map("mieter")
 }
 
 model Vertrag {
-  id         String   @id @default(cuid())
+  id         String         @id @default(cuid())
+  objectId   String
+  tenantId   String
+  rentUnitId String?
   title      String
-  objectName String
-  tenantName String
   startDate  String
   endDate    String
-  status     String   @default("Aktiv")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  status     String         @default("Aktiv")
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  object     PropertyObject @relation(fields: [objectId], references: [id], onDelete: Restrict)
+  tenant     Mieter         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  rentUnit   RentUnit?      @relation(fields: [rentUnitId], references: [id], onDelete: SetNull)
 
+  @@index([objectId])
+  @@index([tenantId])
+  @@index([rentUnitId])
   @@map("vertraege")
+}
+
+model Meter {
+  id          String          @id @default(cuid())
+  objectId    String
+  rentUnitId  String?
+  scope       String          @default("apartment")
+  type        String
+  label       String
+  meterNumber String?
+  unit        String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  object      PropertyObject  @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  rentUnit    RentUnit?       @relation(fields: [rentUnitId], references: [id], onDelete: Cascade)
+  readings    MeterReading[]
+
+  @@index([objectId])
+  @@index([rentUnitId])
+  @@unique([objectId, rentUnitId, type, label])
+  @@map("meters")
+}
+
+model MeterReading {
+  id              String          @id @default(cuid())
+  meterId         String
+  campaignId      String?
+  readingDate     DateTime
+  value           Float
+  readerName      String?
+  source          String          @default("tenant")
+  status          String          @default("eingereicht")
+  submittedById   String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  meter           Meter           @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  campaign        ReadingCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([meterId])
+  @@index([campaignId])
+  @@map("meter_readings")
+}
+
+model ReadingCampaign {
+  id         String          @id @default(cuid())
+  objectId   String
+  reportYear Int
+  status     String          @default("offen")
+  expiresAt  DateTime?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  object     PropertyObject  @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  access     ReadingAccess[]
+  readings   MeterReading[]
+
+  @@unique([objectId, reportYear])
+  @@index([objectId])
+  @@map("reading_campaigns")
+}
+
+model ReadingAccess {
+  id          String          @id @default(cuid())
+  campaignId  String
+  tenantId    String
+  rentUnitId  String
+  token       String          @unique
+  status      String          @default("offen")
+  sentAt      DateTime        @default(now())
+  submittedAt DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  campaign    ReadingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  tenant      Mieter          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rentUnit    RentUnit        @relation(fields: [rentUnitId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, tenantId])
+  @@index([tenantId])
+  @@index([rentUnitId])
+  @@map("reading_access")
+}
+
+model UtilityStatement {
+  id                  String          @id
+  objectId            String?
+  objectDisplayId     String
+  objectName          String
+  reportYear          Int?
+  periodFrom          String
+  periodTo            String
+  status              String          @default("In Arbeit")
+  settlementCreatedOn String
+  settlementUpdatedOn String
+  approvedOn          String?
+  positions           Json
+  units               Json
+  finalReportSnapshot Json?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  object              PropertyObject? @relation(fields: [objectId], references: [id], onDelete: SetNull)
+
+  @@index([objectId])
+  @@index([objectDisplayId])
+  @@index([reportYear])
+  @@map("utility_statements")
 }
 
 enum InternalRole {

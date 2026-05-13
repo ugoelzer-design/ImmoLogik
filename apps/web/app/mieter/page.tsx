@@ -1,13 +1,21 @@
-﻿import { AdminShell } from "@/components/layout/admin-shell";
+import { AdminShell } from "@/components/layout/admin-shell";
+import { getDocuments } from "@/features/documents/services/documents.service";
+import { getRentUnits } from "@/features/finances/services/rent-units.service";
+import { getObjects } from "@/features/objects/services/objects.service";
 import { TenantsModule } from "@/features/tenants/components/tenants-module";
 import { getTenants } from "@/features/tenants/services/tenants.service";
 
 export default async function MieterPage() {
-  const tenants = await getTenants();
+  const [tenants, objects, rentUnits, documents] = await Promise.all([
+    getTenants().catch(() => []),
+    getObjects().catch(() => []),
+    getRentUnits().catch(() => []),
+    getDocuments().catch(() => []),
+  ]);
 
   return (
     <AdminShell>
-      <TenantsModule tenants={tenants} />
+      <TenantsModule tenants={tenants} objects={objects} rentUnits={rentUnits} documents={documents} />
     </AdminShell>
   );
 }

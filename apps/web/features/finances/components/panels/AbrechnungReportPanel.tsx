@@ -42,7 +42,7 @@ type ReportVerteilungsZeile = {
     kostenart: string;
     betrag: number;
     umlagefaehig: boolean;
-    verteilschluessel: "MEA" | "FlÃ¤che" | "Einheit" | "Direkt";
+    verteilschluessel: "MEA" | "Fläche" | "Einheit" | "Direkt";
   };
   verteilungJeEinheit: ReportVerteilungsEintrag[];
   verteilteSumme: number;
@@ -119,22 +119,22 @@ export function AbrechnungReportPanel({
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <p className="text-[11px] uppercase tracking-wide text-zinc-500">
-            Jahresabrechnung â€“ Endansicht
+            Jahresabrechnung – Endansicht
           </p>
           <h4 className="mt-2 text-xl font-semibold text-zinc-900">{item.id}</h4>
           <p className="mt-2 text-sm text-zinc-600">
-            {item.objektDisplayId} Â· {item.objektName} Â· {formatZeitraum(item)}
+            {item.objektDisplayId} · {item.objektName} · {formatZeitraum(item)}
           </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
           <StatusPill tone="teal">{item.objektDisplayId}</StatusPill>
           <StatusPill tone={abschlusspruefung.istVollstaendig ? "dark" : "amber"}>
-            {abschlusspruefung.istVollstaendig ? "PrÃ¼fung erfÃ¼llt" : "PrÃ¼fung offen"}
+            {abschlusspruefung.istVollstaendig ? "Prüfung erfüllt" : "Prüfung offen"}
           </StatusPill>
           <StatusPill>{item.status}</StatusPill>
           {item.positivGeprueftAm ? (
-            <StatusPill>Positiv geprÃ¼ft am {item.positivGeprueftAm}</StatusPill>
+            <StatusPill>Positiv geprüft am {item.positivGeprueftAm}</StatusPill>
           ) : null}
         </div>
       </div>
@@ -146,13 +146,13 @@ export function AbrechnungReportPanel({
             {formatCurrency(summen.summeGesamt)}
           </p>
           <p className="mt-1 text-sm text-zinc-600">
-            UmlagefÃ¤hig {formatCurrency(summen.summeUmlagefaehig)}
+            Umlagefähig {formatCurrency(summen.summeUmlagefaehig)}
           </p>
         </div>
 
         <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
           <p className="text-[11px] uppercase tracking-wide text-zinc-500">
-            Nicht umlagefÃ¤hig
+            Nicht umlagefähig
           </p>
           <p className="mt-2 text-lg font-semibold text-zinc-900">
             {formatCurrency(summen.summeNichtUmlagefaehig)}
@@ -170,7 +170,7 @@ export function AbrechnungReportPanel({
             {abrechnungsergebnisJeEinheit.length} Einheiten
           </p>
           <p className="mt-1 text-sm text-zinc-600">
-            FlÃ¤che {formatArea(einheitenSummen.summeFlaeche)} mÂ² Â· MEA {einheitenSummen.summeMea}
+            Fläche {formatArea(einheitenSummen.summeFlaeche)} m² · MEA {einheitenSummen.summeMea}
           </p>
         </div>
 
@@ -191,7 +191,7 @@ export function AbrechnungReportPanel({
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-[11px] uppercase tracking-wide text-zinc-500">
-              PrÃ¼f- und Archivstatus
+              Prüf- und Archivstatus
             </p>
             <h5 className="mt-2 text-lg font-semibold text-zinc-900">
               Abschluss vor Freigabe und Archiv
@@ -199,7 +199,7 @@ export function AbrechnungReportPanel({
           </div>
           <div className="flex flex-wrap gap-2">
             <StatusPill tone={abschlusspruefung.istVollstaendig ? "dark" : "amber"}>
-              {abschlusspruefung.istVollstaendig ? "vollstÃ¤ndig" : `${offenePruefpunkte.length} offen`}
+              {abschlusspruefung.istVollstaendig ? "vollständig" : `${offenePruefpunkte.length} offen`}
             </StatusPill>
             <StatusPill>{item.status}</StatusPill>
           </div>
@@ -250,7 +250,7 @@ export function AbrechnungReportPanel({
               Kostenverteilung je Position
             </p>
             <h5 className="mt-2 text-lg font-semibold text-zinc-900">
-              Verteilung und rechnerische VollstÃ¤ndigkeit
+              Verteilung und rechnerische Vollständigkeit
             </h5>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -260,7 +260,7 @@ export function AbrechnungReportPanel({
 
         {verteilungAktiverPositionen.length === 0 ? (
           <div className="mt-4 rounded-2xl border border-dashed border-zinc-300 bg-white p-4 text-sm text-zinc-600">
-            Noch keine aktive Position mit Betrag grÃ¶ÃŸer 0 vorhanden.
+            Noch keine aktive Position mit Betrag größer 0 vorhanden.
           </div>
         ) : (
           <div className="mt-4 space-y-4">
@@ -270,13 +270,13 @@ export function AbrechnungReportPanel({
                   <div>
                     <p className="text-sm font-semibold text-zinc-900">{row.position.bezeichnung}</p>
                     <p className="mt-1 text-sm text-zinc-600">
-                      {row.position.kostenart} Â· {row.position.verteilschluessel} Â· {row.position.umlagefaehig ? "umlagefÃ¤hig" : "nicht umlagefÃ¤hig"}
+                      {row.position.kostenart} · {row.position.verteilschluessel} · {row.position.umlagefaehig ? "umlagefähig" : "nicht umlagefähig"}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <StatusPill tone="teal">{formatCurrency(row.position.betrag)}</StatusPill>
                     <StatusPill tone={row.offenerBetrag === 0 ? "dark" : "amber"}>
-                      {row.offenerBetrag === 0 ? "vollstÃ¤ndig verteilt" : `offen ${formatCurrency(row.offenerBetrag)}`}
+                      {row.offenerBetrag === 0 ? "vollständig verteilt" : `offen ${formatCurrency(row.offenerBetrag)}`}
                     </StatusPill>
                   </div>
                 </div>
@@ -338,7 +338,7 @@ export function AbrechnungReportPanel({
                   <div>
                     <p className="text-sm font-semibold text-zinc-900">{entry.reportLabel}</p>
                     <p className="mt-1 text-sm text-zinc-600">
-                      {entry.eigentuemer} Â· {entry.mieter}
+                      {entry.eigentuemer} · {entry.mieter}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -349,9 +349,9 @@ export function AbrechnungReportPanel({
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">FlÃ¤che</p>
+                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">Fläche</p>
                     <p className="mt-2 text-sm font-medium text-zinc-900">
-                      {formatArea(entry.flaeche)} mÂ²
+                      {formatArea(entry.flaeche)} m²
                     </p>
                   </div>
                   <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
@@ -372,14 +372,14 @@ export function AbrechnungReportPanel({
 
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">UmlagefÃ¤hig</p>
+                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">Umlagefähig</p>
                     <p className="mt-2 text-sm font-medium text-zinc-900">
                       {formatCurrency(entry.umlagefaehigAnteil)}
                     </p>
                   </div>
                   <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
                     <p className="text-[11px] uppercase tracking-wide text-zinc-500">
-                      Nicht umlagefÃ¤hig
+                      Nicht umlagefähig
                     </p>
                     <p className="mt-2 text-sm font-medium text-zinc-900">
                       {formatCurrency(entry.nichtUmlagefaehigAnteil)}

@@ -8,6 +8,10 @@ export type CreateObjectInput = {
   units: number;
 };
 
+export type ObjectDisplayIdPreview = {
+  displayId: string;
+};
+
 function normalizeDisplayId(value: string): string {
   return value.trim().toUpperCase();
 }
@@ -38,6 +42,14 @@ export async function createObject(
   );
 
   return normalizeObject(object);
+}
+
+export async function getNextObjectDisplayId(): Promise<string> {
+  const preview = await apiClient.get<ObjectDisplayIdPreview>(
+    apiEndpoints.objects.nextDisplayId,
+  );
+
+  return normalizeDisplayId(preview.displayId);
 }
 
 export async function deleteObject(id: string): Promise<void> {

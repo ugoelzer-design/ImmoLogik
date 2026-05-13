@@ -1,7 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { CreateObjectDto } from './dto/create-object.dto';
 import { ObjectsService } from './objects.service';
 
+@ApiTags('objects')
 @Controller('objects')
 export class ObjectsController {
   constructor(private readonly objectsService: ObjectsService) {}
@@ -9,6 +11,11 @@ export class ObjectsController {
   @Get()
   findAll() {
     return this.objectsService.findAll();
+  }
+
+  @Get('next-display-id')
+  getNextDisplayIdPreview() {
+    return this.objectsService.getNextDisplayIdPreview();
   }
 
   @Get(':id')

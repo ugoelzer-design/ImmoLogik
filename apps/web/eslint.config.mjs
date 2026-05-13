@@ -1,14 +1,17 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { defineConfig, globalIgnores } from 'eslint/config';
+import nextVitals from 'eslint-config-next/core-web-vitals';
+import nextTypescript from 'eslint-config-next/typescript';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  turbopack: {
-    root: __dirname,
+export default defineConfig([
+  ...nextVitals,
+  ...nextTypescript,
+  {
+    rules: {
+      'react-hooks/error-boundaries': 'off',
+      'react-hooks/immutability': 'off',
+      'react-hooks/purity': 'off',
+      'react-hooks/set-state-in-effect': 'off',
+    },
   },
-};
-
-export default nextConfig;
+  globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts']),
+]);

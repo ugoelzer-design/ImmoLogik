@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useEffect,
   useState,
@@ -8,11 +9,18 @@ import {
   type SetStateAction,
 } from "react";
 import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  OBJECT_MODULE_STORAGE_KEYS,
+  readStorageRecord,
+  writeStorageRecord,
+} from "@/features/finances/utils/nebenkosten-storage";
+import type { ImmoDocument } from "@/types/document";
 import type { ImmoObject } from "@/types/object";
 import { kostenarten } from "../../shared/kostenarten";
 
 type ObjectDetailProps = {
   object: ImmoObject | undefined;
+  documents: ImmoDocument[];
 };
 
 type SectionKey =
@@ -521,48 +529,6 @@ const EMPTY_UTILITY_DRAFT: UtilityDraft = {
   meterIds: [],
   note: "",
 };
-
-const LOCAL_STORAGE_KEYS = {
-  apartments: "immologik.object-detail.apartments",
-  tenancies: "immologik.object-detail.tenancies",
-  meters: "immologik.object-detail.meters",
-  utilities: "immologik.object-detail.utilities",
-} as const;
-
-function readStorageRecord<T>(storageKey: string) {
-  if (typeof window === "undefined") {
-    return {} as Record<string, T[]>;
-  }
-
-  const rawValue = window.localStorage.getItem(storageKey);
-
-  if (!rawValue) {
-    return {} as Record<string, T[]>;
-  }
-
-  try {
-    const parsedValue = JSON.parse(rawValue);
-
-    if (!parsedValue || typeof parsedValue !== "object" || Array.isArray(parsedValue)) {
-      return {} as Record<string, T[]>;
-    }
-
-    return parsedValue as Record<string, T[]>;
-  } catch {
-    return {} as Record<string, T[]>;
-  }
-}
-
-function writeStorageRecord<T>(
-  storageKey: string,
-  value: Record<string, T[]>,
-) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(storageKey, JSON.stringify(value));
-}
 
 function getTenancyEndSortValue(endDate: string) {
   return endDate.trim() === "" ? "9999-12-31" : endDate;
@@ -1604,6 +1570,210 @@ function PlaceholderSection({
   );
 }
 
+function getDocumentTimestamp(value: string) {
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function buildObjectDocumentsHref(
+  objectId: string,
+  options?: {
+    rentUnitId?: string;
+    category?: string;
+    reportYear?: number | null;
+    fileState?: string;
+  },
+) {
+  const params = new URLSearchParams({ objectId });
+
+  if (options?.rentUnitId) {
+    params.set("rentUnitId", options.rentUnitId);
+  }
+
+  if (options?.category) {
+    params.set("category", options.category);
+  }
+
+  if (options?.reportYear) {
+    params.set("reportYear", String(options.reportYear));
+  }
+
+  if (options?.fileState) {
+    params.set("fileState", options.fileState);
+  }
+
+  return `/dokumente?${params.toString()}`;
+}
+
+function ObjectDocumentsSection({
+  object,
+  documents,
+}: {
+  object: ImmoObject;
+  documents: ImmoDocument[];
+}) {
+  const sortedDocuments = [...documents].sort(
+    (left, right) =>
+      getDocumentTimestamp(right.updatedAt) - getDocumentTimestamp(left.updatedAt),
+  );
+  const missingFilesCount = documents.filter(
+    (document) => document.fileAvailable === false,
+  ).length;
+  const openDocumentCount = documents.filter(
+    (document) => (document.openIssues?.length ?? 0) > 0 || document.actionState,
+  ).length;
+  const categorySummary = Array.from(
+    documents.reduce((map, document) => {
+      map.set(document.category, (map.get(document.category) ?? 0) + 1);
+      return map;
+    }, new Map<string, number>()),
+  )
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 6);
+  const yearSummary = Array.from(
+    documents.reduce((map, document) => {
+      if (document.reportYear) {
+        map.set(document.reportYear, (map.get(document.reportYear) ?? 0) + 1);
+      }
+      return map;
+    }, new Map<number, number>()),
+  ).sort((left, right) => right[0] - left[0]);
+
+  return (
+    <div className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-5">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-zinc-900">Dokumente</h3>
+          <p className="mt-1 text-sm text-zinc-500">
+            Objektbezogene Unterlagen direkt am Primäranker sichten und in die Ablage öffnen.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={buildObjectDocumentsHref(object.id)}
+            className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition hover:border-zinc-300 hover:bg-zinc-50"
+          >
+            Alle Dokumente öffnen
+          </Link>
+          <Link
+            href={buildObjectDocumentsHref(object.id, { fileState: "DATEI_FEHLT" })}
+            className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition hover:border-zinc-300 hover:bg-zinc-50"
+          >
+            Fehlende Dateien
+          </Link>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+          <p className="text-[11px] uppercase tracking-wide text-zinc-500">Gesamt</p>
+          <p className="mt-2 text-2xl font-semibold text-zinc-900">{documents.length}</p>
+          <p className="mt-1 text-xs text-zinc-600">Dokumente mit Objektzuordnung</p>
+        </div>
+        <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+          <p className="text-[11px] uppercase tracking-wide text-zinc-500">Offene Fälle</p>
+          <p className="mt-2 text-2xl font-semibold text-zinc-900">{openDocumentCount}</p>
+          <p className="mt-1 text-xs text-zinc-600">Prüfung, fehlende Datei oder fehlende Bereinigung</p>
+        </div>
+        <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+          <p className="text-[11px] uppercase tracking-wide text-zinc-500">Datei fehlt</p>
+          <p className="mt-2 text-2xl font-semibold text-zinc-900">{missingFilesCount}</p>
+          <p className="mt-1 text-xs text-zinc-600">Physisch nicht mehr in der Ablage vorhanden</p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+        <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h4 className="text-sm font-semibold text-zinc-900">Zuletzt bearbeitete Dokumente</h4>
+              <p className="mt-1 text-xs text-zinc-500">Direkter Überblick über den aktuellen Objektbestand.</p>
+            </div>
+          </div>
+
+          {sortedDocuments.length === 0 ? (
+            <div className="mt-4 rounded-xl border border-dashed border-zinc-300 bg-white px-4 py-5 text-sm text-zinc-500">
+              Für dieses Objekt sind noch keine Dokumente abgelegt.
+            </div>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {sortedDocuments.slice(0, 6).map((document) => (
+                <div key={document.id} className="rounded-xl border border-zinc-200 bg-white p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-zinc-900">{document.title}</p>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        {document.category}
+                        {document.unitLabel ? ` · ${document.unitLabel}` : ""}
+                        {document.reportYear ? ` · ${document.reportYear}` : ""}
+                      </p>
+                      <p className="mt-1 text-xs text-zinc-400">{document.fileName}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {document.fileAvailable === false ? (
+                        <span className="rounded-full bg-rose-100 px-2 py-1 text-[11px] font-medium text-rose-700">
+                          Datei fehlt
+                        </span>
+                      ) : null}
+                      {(document.openIssues?.length ?? 0) > 0 ? (
+                        <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-medium text-amber-700">
+                          {document.openIssues?.length} offene Punkte
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+            <h4 className="text-sm font-semibold text-zinc-900">Kategorien</h4>
+            {categorySummary.length === 0 ? (
+              <p className="mt-3 text-sm text-zinc-500">Noch keine Kategorien vorhanden.</p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {categorySummary.map(([category, count]) => (
+                  <Link
+                    key={category}
+                    href={buildObjectDocumentsHref(object.id, { category })}
+                    className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm text-zinc-800 transition hover:border-zinc-300 hover:bg-zinc-50"
+                  >
+                    <span>{category}</span>
+                    <span className="font-semibold">{count}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+            <h4 className="text-sm font-semibold text-zinc-900">Berichtsjahre</h4>
+            {yearSummary.length === 0 ? (
+              <p className="mt-3 text-sm text-zinc-500">Noch keine Jahreszuordnung vorhanden.</p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {yearSummary.map(([year, count]) => (
+                  <Link
+                    key={year}
+                    href={buildObjectDocumentsHref(object.id, { reportYear: year })}
+                    className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm text-zinc-800 transition hover:border-zinc-300 hover:bg-zinc-50"
+                  >
+                    <span>{year}</span>
+                    <span className="font-semibold">{count}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OverviewSection({ object }: { object: ImmoObject }) {
   const { street, city } = splitAddress(object.address);
 
@@ -1642,12 +1812,14 @@ function OverviewSection({ object }: { object: ImmoObject }) {
 function ApartmentsSection({
   object,
   apartments,
+  documents,
   onCreateApartment,
   onUpdateApartment,
   onDeleteApartment,
 }: {
   object: ImmoObject;
   apartments: LocalApartment[];
+  documents: ImmoDocument[];
   onCreateApartment: (draft: ApartmentDraft) => void;
   onUpdateApartment: (apartmentId: string, draft: ApartmentDraft) => void;
   onDeleteApartment: (apartmentId: string) => void;
@@ -2027,10 +2199,11 @@ function ApartmentsSection({
           </form>
         ) : null}
 
-        <div className="grid grid-cols-[minmax(0,1.2fr)_140px_160px_220px] gap-4 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+        <div className="grid grid-cols-[minmax(0,1.1fr)_120px_160px_180px_220px] gap-4 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
           <p>Einheit</p>
           <p>Fläche</p>
           <p>Status</p>
+          <p>Dokumente</p>
           <p>Aktionen</p>
         </div>
 
@@ -2167,8 +2340,27 @@ function ApartmentsSection({
               ) : (
                 <div
                   key={apartment.id}
-                  className="grid grid-cols-[minmax(0,1.2fr)_140px_160px_220px] items-center gap-4 rounded-2xl border border-zinc-200 bg-white px-4 py-4"
+                  className="grid grid-cols-[minmax(0,1.1fr)_120px_160px_180px_220px] items-center gap-4 rounded-2xl border border-zinc-200 bg-white px-4 py-4"
                 >
+                  {(() => {
+                    const apartmentDocuments = documents
+                      .filter((document) => document.rentUnitId === apartment.id)
+                      .sort(
+                        (left, right) =>
+                          getDocumentTimestamp(right.updatedAt) -
+                          getDocumentTimestamp(left.updatedAt),
+                      );
+                    const openDocumentCount = apartmentDocuments.filter(
+                      (document) =>
+                        document.fileAvailable === false ||
+                        (document.openIssues?.length ?? 0) > 0 ||
+                        document.status === "Fehlt" ||
+                        document.status === "In Prüfung",
+                    ).length;
+                    const latestDocument = apartmentDocuments[0] ?? null;
+
+                    return (
+                      <>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-zinc-900">
                       {apartment.unitLabel}
@@ -2190,7 +2382,34 @@ function ApartmentsSection({
                     </span>
                   </div>
 
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-zinc-900">
+                      {apartmentDocuments.length} Dokument
+                      {apartmentDocuments.length === 1 ? "" : "e"}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-zinc-500">
+                      {latestDocument
+                        ? `${latestDocument.category}${latestDocument.reportYear ? ` · ${latestDocument.reportYear}` : ""}`
+                        : "Noch keine Ablage"}
+                    </p>
+                    {openDocumentCount > 0 ? (
+                      <p className="mt-1 text-xs font-medium text-amber-700">
+                        {openDocumentCount} offener Fall
+                        {openDocumentCount === 1 ? "" : "e"}
+                      </p>
+                    ) : null}
+                  </div>
+
                   <div className="flex flex-wrap justify-self-start gap-2">
+                    <Link
+                      href={buildObjectDocumentsHref(object.id, {
+                        rentUnitId: apartment.id,
+                      })}
+                      className="inline-flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+                    >
+                      Dokumente
+                    </Link>
+
                     <button
                       type="button"
                       onClick={() => handleEditStart(apartment)}
@@ -2213,6 +2432,9 @@ function ApartmentsSection({
                       Löschen
                     </button>
                   </div>
+                      </>
+                    );
+                  })()}
                 </div>
               ),
             )}
@@ -2227,6 +2449,7 @@ function TenanciesSection({
   object,
   apartments,
   tenancies,
+  documents,
   onCreateTenancy,
   onUpdateTenancy,
   onDeleteTenancy,
@@ -2234,6 +2457,7 @@ function TenanciesSection({
   object: ImmoObject;
   apartments: LocalApartment[];
   tenancies: LocalTenancy[];
+  documents: ImmoDocument[];
   onCreateTenancy: (apartmentId: string, draft: TenancyDraft) => void;
   onUpdateTenancy: (tenancyId: string, draft: TenancyDraft) => void;
   onDeleteTenancy: (tenancyId: string) => void;
@@ -2449,6 +2673,19 @@ function TenanciesSection({
             const apartmentTenancies = getSortedTenanciesForDisplay(
               tenanciesByApartmentId.get(apartment.id) ?? [],
             );
+            const apartmentDocuments = documents.filter(
+              (document) => document.rentUnitId === apartment.id,
+            );
+            const contractDocuments = apartmentDocuments.filter(
+              (document) => document.category === "Mietvertrag",
+            );
+            const openDocumentCount = apartmentDocuments.filter(
+              (document) =>
+                document.fileAvailable === false ||
+                (document.openIssues?.length ?? 0) > 0 ||
+                document.status === "Fehlt" ||
+                document.status === "In Prüfung",
+            ).length;
             const activeTenancy = apartmentTenancies.find(
               (tenancy) => tenancy.endDate.trim() === "",
             );
@@ -2524,6 +2761,25 @@ function TenanciesSection({
                   </div>
 
                   <div className="flex flex-wrap gap-2">
+                    <Link
+                      href={buildObjectDocumentsHref(object.id, {
+                        rentUnitId: apartment.id,
+                      })}
+                      className="inline-flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+                    >
+                      Dokumente
+                    </Link>
+
+                    <Link
+                      href={buildObjectDocumentsHref(object.id, {
+                        rentUnitId: apartment.id,
+                        category: "Mietvertrag",
+                      })}
+                      className="inline-flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+                    >
+                      Mietvertrag
+                    </Link>
+
                     {activeTenancy ? (
                       <button
                         type="button"
@@ -2543,6 +2799,35 @@ function TenanciesSection({
                           : "Mieterwechsel anlegen"}
                       </button>
                     )}
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                      Dokumente gesamt
+                    </p>
+                    <p className="mt-2 text-sm font-medium text-zinc-900">
+                      {apartmentDocuments.length}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                      Mietverträge
+                    </p>
+                    <p className="mt-2 text-sm font-medium text-zinc-900">
+                      {contractDocuments.length}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                      Offene Dokumentfälle
+                    </p>
+                    <p className="mt-2 text-sm font-medium text-zinc-900">
+                      {openDocumentCount}
+                    </p>
                   </div>
                 </div>
 
@@ -4177,6 +4462,7 @@ function UtilitiesSection({
   apartments,
   meters,
   utilities,
+  documents,
   onCreateUtility,
   onUpdateUtility,
   onDeleteUtility,
@@ -4185,6 +4471,7 @@ function UtilitiesSection({
   apartments: LocalApartment[];
   meters: LocalMeter[];
   utilities: LocalUtility[];
+  documents: ImmoDocument[];
   onCreateUtility: (draft: UtilityDraft) => void;
   onUpdateUtility: (utilityId: string, draft: UtilityDraft) => void;
   onDeleteUtility: (utilityId: string) => void;
@@ -4269,6 +4556,25 @@ function UtilitiesSection({
   const linkedMeterCount = new Set(
     utilities.flatMap((utility) => utility.meterIds),
   ).size;
+  const utilityDocuments = documents.filter(
+    (document) =>
+      document.objectId === object.id &&
+      (document.category === "Nebenkostenabrechnung" ||
+        document.category === "Jahresreport WEG"),
+  );
+  const utilityStatementDocuments = utilityDocuments.filter(
+    (document) => document.category === "Nebenkostenabrechnung",
+  );
+  const utilityReportDocuments = utilityDocuments.filter(
+    (document) => document.category === "Jahresreport WEG",
+  );
+  const utilityOpenDocumentCount = utilityDocuments.filter(
+    (document) =>
+      document.fileAvailable === false ||
+      (document.openIssues?.length ?? 0) > 0 ||
+      document.status === "Fehlt" ||
+      document.status === "In Prüfung",
+  ).length;
 
   const createCategoryOptions = getUtilityCategoryOptionsForSelect(draft.category);
   const editCategoryOptions = getUtilityCategoryOptionsForSelect(editDraft.category);
@@ -4730,6 +5036,75 @@ function UtilitiesSection({
       </div>
 
       <div className="space-y-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+        <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <h4 className="text-sm font-semibold text-zinc-900">
+                Dokumente zur Abrechnung
+              </h4>
+              <p className="mt-1 text-sm text-zinc-500">
+                Jahresreports und Nebenkostenabrechnungen direkt aus dem
+                Nebenkostenkontext erreichen.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href={buildObjectDocumentsHref(object.id, {
+                  category: "Nebenkostenabrechnung",
+                })}
+                className="inline-flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+              >
+                Nebenkostenabrechnungen
+              </Link>
+              <Link
+                href={buildObjectDocumentsHref(object.id, {
+                  category: "Jahresreport WEG",
+                })}
+                className="inline-flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+              >
+                Jahresreports
+              </Link>
+              <Link
+                href={buildObjectDocumentsHref(object.id, {
+                  fileState: "DATEI_FEHLT",
+                })}
+                className="inline-flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+              >
+                Fehlende Dateien
+              </Link>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                Nebenkostenabrechnungen
+              </p>
+              <p className="mt-2 text-sm font-medium text-zinc-900">
+                {utilityStatementDocuments.length}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                Jahresreports WEG
+              </p>
+              <p className="mt-2 text-sm font-medium text-zinc-900">
+                {utilityReportDocuments.length}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                Offene Dokumentfälle
+              </p>
+              <p className="mt-2 text-sm font-medium text-zinc-900">
+                {utilityOpenDocumentCount}
+              </p>
+            </div>
+          </div>
+        </div>
 
         {isCreateOpen ? (
           renderUtilityForm(
@@ -4962,7 +5337,7 @@ function normalizeObjectDetailState(
   };
 }
 
-export function ObjectDetail({ object }: ObjectDetailProps) {
+export function ObjectDetail({ object, documents }: ObjectDetailProps) {
   const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
   const [hasLoadedStorage, setHasLoadedStorage] = useState(false);
   const [apartmentsByObject, setApartmentsByObject] = useState<
@@ -4984,14 +5359,14 @@ export function ObjectDetail({ object }: ObjectDetailProps) {
 
   useEffect(() => {
     setApartmentsByObject(
-      readStorageRecord<LocalApartment>(LOCAL_STORAGE_KEYS.apartments),
+      readStorageRecord<LocalApartment>(OBJECT_MODULE_STORAGE_KEYS.apartments),
     );
     setTenanciesByObject(
-      readStorageRecord<LocalTenancy>(LOCAL_STORAGE_KEYS.tenancies),
+      readStorageRecord<LocalTenancy>(OBJECT_MODULE_STORAGE_KEYS.tenancies),
     );
-    setMetersByObject(readStorageRecord<LocalMeter>(LOCAL_STORAGE_KEYS.meters));
+    setMetersByObject(readStorageRecord<LocalMeter>(OBJECT_MODULE_STORAGE_KEYS.meters));
     setUtilitiesByObject(
-      readStorageRecord<LocalUtility>(LOCAL_STORAGE_KEYS.utilities),
+      readStorageRecord<LocalUtility>(OBJECT_MODULE_STORAGE_KEYS.utilities),
     );
     setHasLoadedStorage(true);
   }, []);
@@ -5001,6 +5376,9 @@ export function ObjectDetail({ object }: ObjectDetailProps) {
   const rawTenancies = objectKey ? tenanciesByObject[objectKey] ?? [] : [];
   const rawMeters = objectKey ? metersByObject[objectKey] ?? [] : [];
   const rawUtilities = objectKey ? utilitiesByObject[objectKey] ?? [] : [];
+  const objectDocuments = objectKey
+    ? documents.filter((document) => document.objectId === objectKey)
+    : [];
 
   useEffect(() => {
     if (!hasLoadedStorage || objectKey === "") {
@@ -5017,7 +5395,7 @@ export function ObjectDetail({ object }: ObjectDetailProps) {
     };
 
     setUtilitiesByObject(nextUtilitiesRecord);
-    writeStorageRecord(LOCAL_STORAGE_KEYS.utilities, nextUtilitiesRecord);
+    writeStorageRecord(OBJECT_MODULE_STORAGE_KEYS.utilities, nextUtilitiesRecord);
   }, [hasLoadedStorage, objectKey, utilitiesByObject]);
 
   const {
@@ -5091,10 +5469,10 @@ export function ObjectDetail({ object }: ObjectDetailProps) {
     setMetersByObject(nextMetersRecord);
     setUtilitiesByObject(nextUtilitiesRecord);
 
-    writeStorageRecord(LOCAL_STORAGE_KEYS.apartments, nextApartmentsRecord);
-    writeStorageRecord(LOCAL_STORAGE_KEYS.tenancies, nextTenanciesRecord);
-    writeStorageRecord(LOCAL_STORAGE_KEYS.meters, nextMetersRecord);
-    writeStorageRecord(LOCAL_STORAGE_KEYS.utilities, nextUtilitiesRecord);
+    writeStorageRecord(OBJECT_MODULE_STORAGE_KEYS.apartments, nextApartmentsRecord);
+    writeStorageRecord(OBJECT_MODULE_STORAGE_KEYS.tenancies, nextTenanciesRecord);
+    writeStorageRecord(OBJECT_MODULE_STORAGE_KEYS.meters, nextMetersRecord);
+    writeStorageRecord(OBJECT_MODULE_STORAGE_KEYS.utilities, nextUtilitiesRecord);
   }
 
   function handleCreateApartment(draft: ApartmentDraft) {
@@ -5649,6 +6027,7 @@ export function ObjectDetail({ object }: ObjectDetailProps) {
             <ApartmentsSection
               object={object}
               apartments={apartments}
+              documents={documents}
               onCreateApartment={handleCreateApartment}
               onUpdateApartment={handleUpdateApartment}
               onDeleteApartment={handleDeleteApartment}
@@ -5660,6 +6039,7 @@ export function ObjectDetail({ object }: ObjectDetailProps) {
               object={object}
               apartments={apartments}
               tenancies={tenancies}
+              documents={documents}
               onCreateTenancy={handleCreateTenancy}
               onUpdateTenancy={handleUpdateTenancy}
               onDeleteTenancy={handleDeleteTenancy}
@@ -5687,6 +6067,7 @@ export function ObjectDetail({ object }: ObjectDetailProps) {
               apartments={apartments}
               meters={meters}
               utilities={utilities}
+              documents={documents}
               onCreateUtility={handleCreateUtility}
               onUpdateUtility={handleUpdateUtility}
               onDeleteUtility={handleDeleteUtility}
@@ -5694,10 +6075,7 @@ export function ObjectDetail({ object }: ObjectDetailProps) {
           ) : null}
 
           {activeSection === "documents" ? (
-            <PlaceholderSection
-              title="Dokumente"
-              text="Hier entsteht der fokussierte Arbeitsbereich für objektbezogene Dokumente."
-            />
+            <ObjectDocumentsSection object={object} documents={objectDocuments} />
           ) : null}
         </>
       )}

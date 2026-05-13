@@ -1,36 +1,37 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ImmoLogik Web
 
-## Getting Started
+Next.js-Frontend für die ImmoLogik-Wohnungsverwaltung. Die App läuft standardmäßig auf `http://localhost:3001` und spricht mit der NestJS-API über `NEXT_PUBLIC_API_BASE_URL`.
 
-First, run the development server:
+## Wichtige Bereiche
+
+- `app/`: App-Router-Routen inklusive `error.tsx` Error Boundaries pro Bereich
+- `features/`: Fachmodule für Dashboard, Dokumente, Finanzen, Mieter, Verträge und Zählerablesungen
+- `lib/api/`: gemeinsamer API-Client und zentrale Endpoint-Konstanten
+- `vitest.config.ts`: Test-Setup für Unit- und UI-Tests mit jsdom
+
+## Entwicklung
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm --dir apps/web install
+pnpm --dir apps/web dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Tests
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pnpm --dir apps/web test
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Aktuell abgedeckt sind vor allem:
 
-## Learn More
+- Service-Tests für API-Wrapper
+- UI-Tests für Dokumente und Mietübersicht
+- Utility-Tests für Dashboard-Metriken
 
-To learn more about Next.js, take a look at the following resources:
+## Fehlerbehandlung
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Bereichsspezifische Error Boundaries liegen unter `app/**/error.tsx`. Die gemeinsame Darstellung steckt in `components/ui/error-display.tsx`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## API-Anbindung
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Die Frontend-Services verwenden den gemeinsamen Client aus `lib/api/client.ts` und zentrale Pfade aus `lib/api/endpoints.ts`, damit Request-URLs nicht an vielen Stellen dupliziert werden.

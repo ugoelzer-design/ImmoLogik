@@ -1,0 +1,17 @@
+node_modules
+.pnpm-store
+.next
+dist
+coverage
+*.log
+.env
+.env.*
+!.env.example
+apps/**/node_modules
+apps/**/.next
+apps/**/dist
+apps/**/coverage
+apps/**/*.tsbuildinfo
+backups
+reports/rendered
+minio.exe

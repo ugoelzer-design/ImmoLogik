@@ -1,0 +1,7 @@
+Backup created: 2026-03-22T05:03:01
+Repository root: C:\Users\ugoel\immologik
+Target directory: C:\Users\ugoel\immologik\backups\2026-03-22_050252
+
+code_archive: C:\Users\ugoel\immologik\backups\2026-03-22_050252\immologik-code-2026-03-22_050252.zip
+postgres_dump: C:\Users\ugoel\immologik\backups\2026-03-22_050252\postgres-2026-03-22_050252.sql
+minio_archive: C:\Users\ugoel\immologik\backups\2026-03-22_050252\minio-data-2026-03-22_050252.tar.gz

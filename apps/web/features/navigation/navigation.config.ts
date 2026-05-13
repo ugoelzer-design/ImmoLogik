@@ -1,10 +1,12 @@
 import {
   Building2,
+  FileSignature,
   FolderOpen,
   Landmark,
   LayoutDashboard,
-  Mail,
+  Home,
   Users,
+  Gauge,
   type LucideIcon,
 } from "lucide-react";
 
@@ -18,8 +20,10 @@ export type NavigationItem = {
 export const navigationItems: NavigationItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, position: "top" },
   { label: "Objekte", href: "/objekte", icon: Building2, position: "top" },
+  { label: "Mieter", href: "/mieter", icon: Users, position: "top" },
+  { label: "Verträge", href: "/vertraege", icon: FileSignature, position: "top" },
   { label: "Finanzen", href: "/finanzen", icon: Landmark, position: "top" },
+  { label: "Ablesungen", href: "/ablesungen", icon: Gauge, position: "top" },
   { label: "Dokumente", href: "/dokumente", icon: FolderOpen, position: "top" },
-  { label: "Nachrichten", href: "/nachrichten", icon: Mail, position: "top" },
-  { label: "Kontakte", href: "/kontakte", icon: Users, position: "bottom" },
+  { label: "Startseite", href: "/", icon: Home, position: "bottom" },
 ];

@@ -1,35 +1,40 @@
 import { AdminShell } from "@/components/layout/admin-shell";
 import { DashboardOverview } from "@/features/dashboard/components/dashboard-overview";
+import {
+  buildRecentActivities,
+  countRecentDocuments,
+} from "@/features/dashboard/utils/dashboard-metrics";
+import { API_BASE_URL } from "@/lib/api/client";
+import type { Contract } from "@/types/contract";
+import type { ImmoDocument } from "@/types/document";
+import type { ImmoObject } from "@/types/object";
+import type { Tenant } from "@/types/tenant";
 
-const API = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:3000";
+type RentUnit = { id: string; unitLabel: string; createdAt: string };
 
-async function fetchAll(path: string): Promise<any[]> {
+async function fetchAll<T>(path: string): Promise<T[]> {
   try {
-    const res = await fetch(`${API}${path}`, { cache: "no-store" });
+    const res = await fetch(`${API_BASE_URL}${path}`, { cache: "no-store" });
     if (!res.ok) return [];
-    return res.json();
+    return res.json() as Promise<T[]>;
   } catch { return []; }
 }
 
 export default async function DashboardPage() {
   const [objects, mieter, vertraege, dokumente, rentUnits] = await Promise.all([
-    fetchAll("/objects"),
-    fetchAll("/tenants"),
-    fetchAll("/contracts"),
-    fetchAll("/documents"),
-    fetchAll("/rent-units"),
+    fetchAll<ImmoObject>("/objects"),
+    fetchAll<Tenant>("/tenants"),
+    fetchAll<Contract>("/contracts"),
+    fetchAll<ImmoDocument>("/documents"),
+    fetchAll<RentUnit>("/rent-units"),
   ]);
 
-  const recentActivities = [
-    ...objects.slice(0, 2).map((o: any) => ({ text: `WEG angelegt: ${o.name}`, date: o.createdAt })),
-    ...dokumente.slice(0, 2).map((d: any) => ({ text: `Dokument hochgeladen: ${d.title}`, date: d.createdAt })),
-    ...rentUnits.slice(0, 2).map((r: any) => ({ text: `Mieteinheit angelegt: ${r.unitLabel}`, date: r.createdAt })),
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5);
+  const recentActivities = buildRecentActivities(objects, dokumente, rentUnits);
 
-  const vertraegeAblaufend = vertraege.filter((v: any) => v.status === "Läuft aus" || v.status === "In Prüfung").length;
-  const mieterAktiv = mieter.filter((m: any) => m.status === "Aktiv").length;
-  const mieterAusstehend = mieter.filter((m: any) => m.status === "Ausstehend").length;
-  const dokNeu = dokumente.filter((d: any) => new Date(d.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)).length;
+  const vertraegeAblaufend = vertraege.filter((v) => v.status === "Läuft aus" || v.status === "In Prüfung").length;
+  const mieterAktiv = mieter.filter((m) => m.status === "Aktiv").length;
+  const mieterAusstehend = mieter.filter((m) => m.status === "Ausstehend").length;
+  const dokNeu = countRecentDocuments(dokumente);
 
   return (
     <AdminShell>

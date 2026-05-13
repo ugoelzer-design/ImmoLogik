@@ -9,6 +9,40 @@ export type ReportPositionVM = {
   anteil: string;
 };
 
+export type VerbrauchshistorieEintrag = {
+  jahr: string;
+  heizung?: string;
+  wasser?: string;
+  strom?: string;
+  bemerkung?: string;
+};
+
+export type VermieterKostenPosition = {
+  label: string;
+  betrag: string;
+  hinweis?: string;
+};
+
+export type VermieterMieterEintrag = {
+  einheit: string;
+  mieter: string;
+  vorauszahlung: string;
+  umlagefaehigerAnteil: string;
+  mieterSaldo: string;
+  status: string;
+};
+
+export type VermieterreportTemplateData = {
+  objektName: string;
+  eigentuemerName: string;
+  abrechnungszeitraumVon: string;
+  abrechnungszeitraumBis: string;
+  berichtsdatum?: string;
+  kostenpositionen: VermieterKostenPosition[];
+  mieterUebersicht: VermieterMieterEintrag[];
+  reportId?: string;
+};
+
 export type EinzelreportTemplateData = {
   objektName: string;
   einheitName: string; // e.g. "EG links"
@@ -31,10 +65,12 @@ export type EinzelreportTemplateData = {
   ergebnisart: "Nachzahlung" | "Guthaben" | "Ausgeglichen";
 
   positionen: ReportPositionVM[];
+  verbrauchshistorie?: VerbrauchshistorieEintrag[];
 
   hinweistext?: string;
   grussformel?: string;
   absenderName?: string;
+  reportId?: string;
 };
 
 export const formatGermanDate = (value: string | Date) => {
@@ -146,7 +182,7 @@ export function NebenkostenEinzelreportTemplate({
   const wohneinheitBezeichnung = wohnungsbezeichnung;
 
   return (
-    <section style={pageStyle}>
+    <section style={pageStyle} data-report-id={data.reportId}>
       <header
         style={{
           display: "grid",
@@ -254,6 +290,36 @@ export function NebenkostenEinzelreportTemplate({
         </table>
       </section>
 
+      {data.verbrauchshistorie && data.verbrauchshistorie.length > 0 ? (
+        <section style={{ marginTop: 24 }}>
+          <h2 style={{ fontSize: "14pt", margin: "0 0 12px" }}>Verbrauchshistorie</h2>
+          <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ ...tableCellStyle, color: mutedText, fontSize: "10pt" }}>Jahr</th>
+                  <th style={{ ...tableCellStyle, color: mutedText, fontSize: "10pt" }}>Heizung</th>
+                  <th style={{ ...tableCellStyle, color: mutedText, fontSize: "10pt" }}>Wasser</th>
+                  <th style={{ ...tableCellStyle, color: mutedText, fontSize: "10pt" }}>Strom</th>
+                  <th style={{ ...tableCellStyle, color: mutedText, fontSize: "10pt" }}>Hinweis</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.verbrauchshistorie.map((entry) => (
+                  <tr key={entry.jahr}>
+                    <td style={tableCellStyle}>{entry.jahr}</td>
+                    <td style={tableCellStyle}>{entry.heizung ?? "—"}</td>
+                    <td style={tableCellStyle}>{entry.wasser ?? "—"}</td>
+                    <td style={tableCellStyle}>{entry.strom ?? "—"}</td>
+                    <td style={tableCellStyle}>{entry.bemerkung ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
       {data.hinweistext ? (
         <section style={{ marginTop: 24 }}>
           <p style={{ margin: 0 }}>{data.hinweistext}</p>
@@ -264,6 +330,94 @@ export function NebenkostenEinzelreportTemplate({
         <p style={{ margin: "0 0 8px" }}>{data.grussformel ?? "Mit freundlichen Grüßen"}</p>
         <p style={{ margin: 0 }}>{versender}</p>
       </footer>
+    </section>
+  );
+}
+
+export function NebenkostenVermieterreportTemplate({
+  data,
+}: {
+  data: VermieterreportTemplateData;
+}) {
+  return (
+    <section style={pageStyle} data-owner-report-id={data.reportId}>
+      <header
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 24,
+          marginBottom: 32,
+          alignItems: "start",
+        }}
+      >
+        <div>
+          <div style={labelStyle}>Vermieterreport</div>
+          <div style={{ fontSize: "18pt", fontWeight: 700 }}>{data.eigentuemerName}</div>
+          <div style={{ marginTop: 4 }}>{data.objektName}</div>
+        </div>
+        <div style={{ justifySelf: "end", textAlign: "right" }}>
+          <div>Zeitraum {formatGermanDate(data.abrechnungszeitraumVon)} bis {formatGermanDate(data.abrechnungszeitraumBis)}</div>
+          {data.berichtsdatum ? <div style={{ marginTop: 4 }}>{formatGermanDate(data.berichtsdatum)}</div> : null}
+        </div>
+      </header>
+
+      <section style={{ marginBottom: 24 }}>
+        <h1 style={{ fontSize: "18pt", margin: "0 0 12px" }}>Vermieterreport</h1>
+        <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+          <div style={{ padding: 14, borderBottom: `1px solid ${lineColor}` }}>
+            <div style={labelStyle}>Eigentümerkosten und Vor-/Nachzahlung</div>
+          </div>
+          {data.kostenpositionen.map((position, index) => (
+            <div
+              key={`${position.label}-${index}`}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 180px",
+                gap: 16,
+                padding: "12px 14px",
+                borderBottom: index < data.kostenpositionen.length - 1 ? `1px solid ${lineColor}` : "none",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <div>{position.label}</div>
+                {position.hinweis ? (
+                  <div style={{ color: mutedText, fontSize: "10pt", marginTop: 2 }}>{position.hinweis}</div>
+                ) : null}
+              </div>
+              <div style={{ textAlign: "right", fontWeight: 700 }}>{position.betrag}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h2 style={{ fontSize: "14pt", margin: "0 0 12px" }}>Übersichtswerte Ihrer Mieter</h2>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={{ ...tableCellStyle, color: mutedText, fontSize: "10pt" }}>Einheit</th>
+              <th style={{ ...tableCellStyle, color: mutedText, fontSize: "10pt" }}>Mieter</th>
+              <th style={{ ...tableCellStyle, color: mutedText, fontSize: "10pt" }}>Vorauszahlung</th>
+              <th style={{ ...tableCellStyle, color: mutedText, fontSize: "10pt" }}>Umlagefähiger Anteil</th>
+              <th style={{ ...tableCellStyle, color: mutedText, fontSize: "10pt" }}>Saldo</th>
+              <th style={{ ...tableCellStyle, color: mutedText, fontSize: "10pt" }}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.mieterUebersicht.map((entry, index) => (
+              <tr key={`${entry.einheit}-${entry.mieter}-${index}`}>
+                <td style={tableCellStyle}>{entry.einheit}</td>
+                <td style={tableCellStyle}>{entry.mieter}</td>
+                <td style={tableCellStyle}>{entry.vorauszahlung}</td>
+                <td style={tableCellStyle}>{entry.umlagefaehigerAnteil}</td>
+                <td style={tableCellStyle}>{entry.mieterSaldo}</td>
+                <td style={tableCellStyle}>{entry.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
     </section>
   );
 }

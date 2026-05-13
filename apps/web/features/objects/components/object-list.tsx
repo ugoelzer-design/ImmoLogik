@@ -37,7 +37,7 @@ export function ObjectList({
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-zinc-900">Objektliste</h2>
         <p className="text-sm text-zinc-500">
-          Auswahl und Schnellzugriff auf Objekte.
+          Auswahl und Schnellzugriff auf Objekte mit sichtbarer Kurz-ID.
         </p>
       </div>
 
@@ -72,6 +72,9 @@ export function ObjectList({
                   className="col-span-4 grid grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)_110px_130px] gap-3 text-left"
                 >
                   <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                      {object.displayId}
+                    </p>
                     <p className="truncate text-sm font-semibold text-zinc-900">
                       {object.name}
                     </p>

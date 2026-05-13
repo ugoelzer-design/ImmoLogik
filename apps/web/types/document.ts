@@ -6,10 +6,17 @@ export type ImmoDocument = {
   size: number;
   objectId: string | null;
   objectName: string;
+  rentUnitId: string | null;
+  unitLabel: string | null;
+  reportYear: number | null;
   category: string;
   status: string;
   uploadedBy: string | null;
   downloadUrl: string | null;
+  storagePath?: string | null;
+  fileAvailable?: boolean;
+  openIssues?: string[];
+  actionState?: "file_missing" | "assignment_missing" | "review_pending" | "status_missing" | null;
   createdAt: string;
   updatedAt: string;
 };

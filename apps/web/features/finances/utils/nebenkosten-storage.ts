@@ -3,6 +3,7 @@
 export const OBJECT_MODULE_STORAGE_KEYS = {
   apartments: "immologik.object-detail.apartments",
   tenancies:  "immologik.object-detail.tenancies",
+  meters:     "immologik.object-detail.meters",
   utilities:  "immologik.object-detail.utilities",
 } as const;
 
@@ -20,11 +21,6 @@ export function readStorageValue<T>(storageKey: string, fallbackValue: T): T {
   try { return JSON.parse(raw) as T; } catch { return fallbackValue; }
 }
 
-export function writeStorageValue<T>(storageKey: string, value: T) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(storageKey, JSON.stringify(value));
-}
-
 export function readStorageRecord<T>(storageKey: string): Record<string, T[]> {
   if (typeof window === "undefined") return {};
   const raw = window.localStorage.getItem(storageKey);
@@ -34,6 +30,14 @@ export function readStorageRecord<T>(storageKey: string): Record<string, T[]> {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
     return parsed as Record<string, T[]>;
   } catch { return {}; }
+}
+
+export function writeStorageRecord<T>(
+  storageKey: string,
+  value: Record<string, T[]>,
+) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(storageKey, JSON.stringify(value));
 }
 
 import type { NebenkostenAbrechnung } from "@/types/nebenkosten";

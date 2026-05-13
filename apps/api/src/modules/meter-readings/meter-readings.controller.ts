@@ -1,0 +1,39 @@
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+import { CreateReadingCampaignDto } from './dto/create-reading-campaign.dto';
+import { SubmitMeterReadingsDto } from './dto/submit-meter-readings.dto';
+import { MeterReadingsService } from './meter-readings.service';
+import { Public } from '../../auth/public.decorator';
+
+@ApiTags('meter-readings')
+@Controller('meter-readings')
+export class MeterReadingsController {
+  constructor(private readonly meterReadingsService: MeterReadingsService) {}
+
+  @Get('campaigns')
+  findCampaigns(@Query('objectId') objectId?: string) {
+    return this.meterReadingsService.findCampaigns(objectId);
+  }
+
+  @Post('campaigns')
+  createCampaign(@Body() dto: CreateReadingCampaignDto) {
+    return this.meterReadingsService.createCampaign(dto);
+  }
+
+  /** Öffentlicher Endpunkt: Mieter ruft seinen Ablese-Zugang per Token ab. */
+  @Public()
+  @Get('access/:token')
+  getAccess(@Param('token') token: string) {
+    return this.meterReadingsService.getAccess(token);
+  }
+
+  /** Öffentlicher Endpunkt: Mieter reicht Zählerstände per Token ein. */
+  @Public()
+  @Post('access/:token/readings')
+  submitReadings(
+    @Param('token') token: string,
+    @Body() dto: SubmitMeterReadingsDto,
+  ) {
+    return this.meterReadingsService.submitReadings(token, dto);
+  }
+}

@@ -27,12 +27,21 @@ export function BearbeitenAbrechnungDialog({
   if (!open || !item) return null;
 
   function handleSave() {
-    onSave({
-      ...item,
+    if (!item) return;
+
+    const payload: NebenkostenAbrechnung = {
+      id: item.id,
+      objektDisplayId: item.objektDisplayId,
+      objektName: item.objektName,
+      status: item.status,
+      erstelltAm: item.erstelltAm,
+      positivGeprueftAm: item.positivGeprueftAm,
       zeitraumVon,
       zeitraumBis,
       geaendertAm: currentDateForDisplay(),
-    });
+    };
+
+    onSave(payload);
   }
 
   return (

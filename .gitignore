@@ -16,3 +16,9 @@ yarn-error.log*
 !.env.example
 .DS_Store
 Thumbs.db
+*.exe
+
+# Prisma/Editor-Backup-Dateien
+*.bak
+*.bak.*
+prisma/archived/

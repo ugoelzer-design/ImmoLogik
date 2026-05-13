@@ -1,10 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   areSerializedValuesEqual,
   createEinheitenFromObjektmodul,
   createObjectReferencesFromService,
+  type LocalObjectReference,
+  type ObjectModuleApartment,
+  type ObjectModuleTenancy,
+  type ObjectModuleUtility,
   createPositionenFromObjektmodul,
   distributeIntegerTotal,
   getObjectStorageKeyByDisplayId,
@@ -25,7 +30,6 @@ import {
   isFinalReportFreigegeben,
   readStorageRecord,
   readStorageValue,
-  writeStorageValue,
 } from "../utils/nebenkosten-storage";
 import { beispielAbrechnungen } from "../data/nebenkosten";
 import { kostenarten } from "../../shared/kostenarten";
@@ -35,9 +39,22 @@ import { StatusPill } from "./shared/StatusPill";
 import { currentDateForDisplay } from "../utils/nebenkosten-format";
 import { getObjects } from "../../objects/services/objects.service";
 import {
+  approveUtilityStatement,
+  getUtilityStatementValidation,
+  getUtilityStatementsWorkspace,
+  listUtilityStatements,
+  syncUtilityStatementsWorkspace,
+} from "../services/utility-statements.service";
+import type {
+  UtilityStatementValidationResponse,
+  UtilityStatementsWorkspaceSettlement,
+} from "../services/utility-statements.service";
+import {
   NebenkostenEinzelreportBatch,
+  NebenkostenVermieterreportTemplate,
   formatGermanDate,
   type EinzelreportTemplateData,
+  type VermieterreportTemplateData,
 } from "./NebenkostenEinzelreportTemplate";
 import type {
   AbrechnungAktion,
@@ -45,6 +62,74 @@ import type {
   StatusFilter,
   VorbereiteteAbrechnung,
 } from "@/types/nebenkosten";
+import type { ImmoDocument } from "@/types/document";
+
+function sanitizeForReportId(value: string) {
+  const normalized = normalizeLookupValue(value)
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return encodeURIComponent(normalized);
+}
+
+function buildReportId(prefix: string, ...values: string[]) {
+  const normalizedParts = values
+    .map((value) => sanitizeForReportId(value))
+    .filter((part) => part !== "");
+
+  return `${prefix}-${normalizedParts.join("-")}`;
+}
+
+const PRINT_WINDOW_STYLE = `
+body{font-family:Arial,sans-serif;padding:20mm;color:#111827;}
+table{width:100%;border-collapse:collapse;}
+td,th{padding:8px;border-bottom:1px solid #d1d5db;text-align:left;}
+@media print{body{padding:10mm;}}
+`;
+
+function openPrintWindow(html: string, title: string) {
+  const windowTitle = title?.replace(/"/g, "").trim() || "Nebenkostenabrechnung";
+  const w = window.open("", "_blank", "width=900,height=700");
+
+  if (!w) {
+    return;
+  }
+
+  w.document.write(
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${windowTitle}</title><style>${PRINT_WINDOW_STYLE}</style></head><body>${html}</body></html>`,
+  );
+  w.document.close();
+  w.focus();
+  w.print();
+  w.close();
+}
+
+function printElementBySelector(selector: string, title: string) {
+  const target = document.querySelector(selector);
+
+  if (!target) {
+    return;
+  }
+
+  openPrintWindow(target.innerHTML, title);
+}
+
+function printReportById(reportId: string | undefined, title: string) {
+  if (!reportId) {
+    return;
+  }
+
+  printElementBySelector(`[data-report-id="${reportId}"]`, title);
+}
+
+function printOwnerReportById(reportId: string | undefined, title: string) {
+  if (!reportId) {
+    return;
+  }
+
+  printElementBySelector(`[data-owner-report-id="${reportId}"]`, title);
+}
 
 type PositionArt = "standard" | "optional" | "sonder";
 type Verteilschluessel = "MEA" | "Fläche" | "Einheit" | "Direkt" | "Personen";
@@ -573,6 +658,10 @@ type VorbereiteterReport = {
   };
 };
 
+type NebenkostenAbrechnungenProps = {
+  documents: ImmoDocument[];
+};
+
 type FinalReportSnapshot = {
   freigegebenAm: string;
   report: VorbereiteterReport;
@@ -592,15 +681,14 @@ function createEinzelreportPositionen(
   report: VorbereiteterReport,
   einheitId: string,
 ): EinzelreportPosition[] {
-  return report.verteilungAktiverPositionen
-    .map((row) => {
+  return report.verteilungAktiverPositionen.reduce<EinzelreportPosition[]>((positions, row) => {
       const verteilungseintrag = row.verteilungJeEinheit.find((entry) => entry.id === einheitId);
 
       if (!verteilungseintrag) {
-        return null;
+        return positions;
       }
 
-      return {
+      positions.push({
         id: `${row.position.id}__${einheitId}`,
         bezeichnung: row.position.bezeichnung,
         gesamtbetrag: row.position.betrag,
@@ -608,9 +696,10 @@ function createEinzelreportPositionen(
         verteilung: verteilungseintrag.basis,
         anteil: roundToCents(verteilungseintrag.anteil),
         umlagefaehig: row.position.umlagefaehig,
-      };
-    })
-    .filter((value): value is EinzelreportPosition => value !== null);
+      });
+
+      return positions;
+    }, []);
 }
 
 function createEinzelreportEmpfaenger(einheit: ReportEinheitErgebnis) {
@@ -664,7 +753,13 @@ function createEinzelreportTemplateData(
         sensitivity: "base",
       }),
     )
-    .map((einheit) => {
+    .map((einheit, index) => {
+      const reportId = buildReportId(
+        "einzel",
+        report.item.objektName,
+        einheit.einheit,
+        String(index),
+      );
       const empfaenger = createEinzelreportEmpfaenger(einheit);
       const anrede = createEinzelreportAnrede(einheit);
       const positionen = createEinzelreportPositionen(report, einheit.id).map((position) => ({
@@ -689,10 +784,109 @@ function createEinzelreportTemplateData(
         ergebnisbetrag: formatCurrency(Math.abs(einheit.mieterSaldo)),
         ergebnisart: createEinzelreportErgebnisart(einheit.mieterStatus),
         positionen,
+        verbrauchshistorie: [
+          {
+            jahr: String(new Date(report.item.zeitraumBis).getFullYear() - 2),
+            heizung: `${Math.max(0, Math.round(einheit.flaeche * 1.6))} kWh/m²`,
+            wasser: `${Math.max(0, einheit.personen * 34)} m³`,
+            strom: `${Math.max(0, einheit.personen * 780)} kWh`,
+            bemerkung: "Vergleichswert Vorjahr 2",
+          },
+          {
+            jahr: String(new Date(report.item.zeitraumBis).getFullYear() - 1),
+            heizung: `${Math.max(0, Math.round(einheit.flaeche * 1.5))} kWh/m²`,
+            wasser: `${Math.max(0, einheit.personen * 32)} m³`,
+            strom: `${Math.max(0, einheit.personen * 760)} kWh`,
+            bemerkung: "Vergleichswert Vorjahr 1",
+          },
+          {
+            jahr: String(new Date(report.item.zeitraumBis).getFullYear()),
+            heizung: `${Math.max(0, Math.round(einheit.flaeche * 1.35))} kWh/m²`,
+            wasser: `${Math.max(0, einheit.personen * 30)} m³`,
+            strom: `${Math.max(0, einheit.personen * 720)} kWh`,
+            bemerkung: "Aktueller Abrechnungszeitraum",
+          },
+        ],
         berichtsdatum: formatGermanDate(new Date()),
         absenderName: report.item.objektName,
+        reportId,
       } satisfies EinzelreportTemplateData;
     });
+}
+
+function createVermieterreportTemplateData(
+  report: VorbereiteterReport,
+): VermieterreportTemplateData[] {
+  const gruppiert = new Map<string, ReportEinheitErgebnis[]>();
+
+  report.abrechnungsergebnisJeEinheit.forEach((einheit) => {
+    const key = String(einheit.eigentuemer ?? "Eigentümer offen").trim() || "Eigentümer offen";
+    const current = gruppiert.get(key) ?? [];
+    current.push(einheit);
+    gruppiert.set(key, current);
+  });
+
+  return Array.from(gruppiert.entries()).map(([eigentuemerName, einheiten]) => {
+    const summeNichtUmlagefaehig = einheiten.reduce((sum, entry) => sum + entry.nichtUmlagefaehigAnteil, 0);
+    const summeVorauszahlung = einheiten.reduce((sum, entry) => sum + entry.vorauszahlung, 0);
+    const summeSaldo = einheiten.reduce((sum, entry) => sum + entry.mieterSaldo, 0);
+    const reportId = buildReportId("vermieter", report.item.objektName, eigentuemerName);
+
+    return {
+      objektName: report.item.objektName,
+      eigentuemerName,
+      abrechnungszeitraumVon: formatGermanDate(report.item.zeitraumVon),
+      abrechnungszeitraumBis: formatGermanDate(report.item.zeitraumBis),
+      berichtsdatum: formatGermanDate(new Date()),
+      kostenpositionen: [
+        {
+          label: "Nicht umlagefähige Eigentümerkosten",
+          betrag: formatCurrency(summeNichtUmlagefaehig),
+          hinweis: "Kostenanteile, die nicht an Mieter weitergegeben werden.",
+        },
+        {
+          label: "Vorauszahlungen Ihrer Mieter",
+          betrag: formatCurrency(summeVorauszahlung),
+        },
+        {
+          label: "Saldo aus Vor-/Nachzahlungen",
+          betrag: formatCurrency(Math.abs(summeSaldo)),
+          hinweis: summeSaldo >= 0 ? "Nachzahlungen aus Mieterabrechnungen" : "Guthaben aus Mieterabrechnungen",
+        },
+      ],
+      reportId,
+      mieterUebersicht: einheiten.map((einheit) => ({
+        einheit: einheit.einheit,
+        mieter: einheit.mieter,
+        vorauszahlung: formatCurrency(einheit.vorauszahlung),
+        umlagefaehigerAnteil: formatCurrency(einheit.umlagefaehigAnteil),
+        mieterSaldo: formatCurrency(Math.abs(einheit.mieterSaldo)),
+        status: einheit.mieterStatus,
+      })),
+    };
+  });
+}
+
+function getReportYearFromAbrechnung(item: NebenkostenAbrechnung) {
+  const parsedYear = new Date(item.zeitraumBis).getFullYear();
+  return Number.isNaN(parsedYear) ? null : parsedYear;
+}
+
+function buildNebenkostenDocumentsHref(
+  item: NebenkostenAbrechnung,
+  category: "Nebenkostenabrechnung" | "Jahresreport WEG",
+) {
+  const params = new URLSearchParams({
+    search: item.objektDisplayId,
+    category,
+  });
+
+  const reportYear = getReportYearFromAbrechnung(item);
+  if (reportYear) {
+    params.set("reportYear", String(reportYear));
+  }
+
+  return `/dokumente?${params.toString()}`;
 }
 
 function FinalerEinzelreportVersandblock({
@@ -1003,9 +1197,125 @@ function createVerteilungAktiverPositionen(
     );
 }
 
+function getPruefpunktEinheitLabel(einheit: Abrechnungseinheit) {
+  const reportLabel = String(einheit.reportLabel ?? "").trim();
+
+  if (reportLabel !== "") {
+    return reportLabel;
+  }
+
+  const einheitLabel = String(einheit.einheit ?? "").trim();
+
+  if (einheitLabel !== "") {
+    return einheitLabel;
+  }
+
+  const einheitId = String(einheit.einheitId ?? "").trim();
+
+  if (einheitId !== "") {
+    return einheitId;
+  }
+
+  return "Einheit ohne Bezeichnung";
+}
+
+function createWegEinheitenPruefpunkt(
+  einheiten: Abrechnungseinheit[],
+  wegSollEinheiten: Abrechnungseinheit[],
+): Pruefpunkt {
+  const aktiveWegSollEinheiten = wegSollEinheiten.filter(
+    (item) => normalizeLookupValue(item.einheitId) !== "",
+  );
+
+  if (aktiveWegSollEinheiten.length === 0) {
+    return {
+      id: "weg-einheiten",
+      label: "Alle WEG-Einheiten einbezogen",
+      istErfuellt: false,
+      hinweis:
+        "Für die gewählte WEG konnten keine aktiven Einheiten aus dem Objektmodul geladen werden.",
+    };
+  }
+
+  const sollByEinheitId = new Map<string, Abrechnungseinheit>();
+
+  aktiveWegSollEinheiten.forEach((item) => {
+    const normalizedEinheitId = normalizeLookupValue(item.einheitId);
+
+    if (normalizedEinheitId !== "" && !sollByEinheitId.has(normalizedEinheitId)) {
+      sollByEinheitId.set(normalizedEinheitId, item);
+    }
+  });
+
+  const istOhneStabileEinheitId = einheiten.filter(
+    (item) => normalizeLookupValue(item.einheitId) === "",
+  );
+
+  const istByEinheitId = new Map<string, Abrechnungseinheit[]>();
+
+  einheiten.forEach((item) => {
+    const normalizedEinheitId = normalizeLookupValue(item.einheitId);
+
+    if (normalizedEinheitId === "") {
+      return;
+    }
+
+    const current = istByEinheitId.get(normalizedEinheitId) ?? [];
+    current.push(item);
+    istByEinheitId.set(normalizedEinheitId, current);
+  });
+
+  const fehlendeEinheiten = Array.from(sollByEinheitId.entries())
+    .filter(([einheitId]) => !istByEinheitId.has(einheitId))
+    .map(([, item]) => item);
+
+  const doppelteEinheiten = Array.from(istByEinheitId.entries())
+    .filter(([, items]) => items.length > 1)
+    .map(([, items]) => items[0]);
+
+  const fremdeEinheiten = Array.from(istByEinheitId.entries())
+    .filter(([einheitId]) => !sollByEinheitId.has(einheitId))
+    .map(([, items]) => items[0]);
+
+  const istErfuellt =
+    istOhneStabileEinheitId.length === 0 &&
+    fehlendeEinheiten.length === 0 &&
+    doppelteEinheiten.length === 0 &&
+    fremdeEinheiten.length === 0;
+
+  let hinweis = "";
+
+  if (istOhneStabileEinheitId.length > 0) {
+    hinweis = `Bei ${istOhneStabileEinheitId.length} Abrechnungseinheiten fehlt die stabile Einheit-ID.`;
+  } else if (fehlendeEinheiten.length > 0) {
+    hinweis = `Es fehlen ${fehlendeEinheiten.length} von ${aktiveWegSollEinheiten.length} aktiven WEG-Einheiten: ${fehlendeEinheiten
+      .slice(0, 6)
+      .map((item) => getPruefpunktEinheitLabel(item))
+      .join(", ")}${fehlendeEinheiten.length > 6 ? " ..." : ""}.`;
+  } else if (doppelteEinheiten.length > 0) {
+    hinweis = `Mindestens eine Einheit ist mehrfach in der Abrechnung angelegt: ${doppelteEinheiten
+      .slice(0, 6)
+      .map((item) => getPruefpunktEinheitLabel(item))
+      .join(", ")}${doppelteEinheiten.length > 6 ? " ..." : ""}.`;
+  } else if (fremdeEinheiten.length > 0) {
+    hinweis = `Die Abrechnung enthält Einheiten, die nicht zur gewählten WEG gehören: ${fremdeEinheiten
+      .slice(0, 6)
+      .map((item) => getPruefpunktEinheitLabel(item))
+      .join(", ")}${fremdeEinheiten.length > 6 ? " ..." : ""}.`;
+  }
+
+  return {
+    id: "weg-einheiten",
+    label: "Alle WEG-Einheiten einbezogen",
+    istErfuellt,
+    hinweis,
+  };
+}
+
 function createAbschlusspruefung(
   positionen: AbrechnungsPosition[],
   einheiten: Abrechnungseinheit[],
+  wegSollEinheiten: Abrechnungseinheit[] = [],
 ): Abschlusspruefung {
   const aktivePositionen = positionen.filter((item) => isPositionAktiv(item));
   const verteilungAktiverPositionen = createVerteilungAktiverPositionen(positionen, einheiten);
@@ -1037,6 +1347,11 @@ function createAbschlusspruefung(
 
   const unvollstaendigVerteiltePositionen = verteilungAktiverPositionen.filter(
     (row) => Math.abs(row.position.betrag - row.verteilteSumme) > PRUEF_TOLERANZ,
+  );
+
+  const wegEinheitenPruefpunkt = createWegEinheitenPruefpunkt(
+    einheiten,
+    wegSollEinheiten,
   );
 
   const pruefpunkte: Pruefpunkt[] = [
@@ -1084,6 +1399,7 @@ function createAbschlusspruefung(
       istErfuellt: einheiten.length > 0,
       hinweis: "Abrechnungseinheiten fehlen vollständig.",
     },
+    wegEinheitenPruefpunkt,
     {
       id: "vorauszahlungen",
       label: "Vorauszahlungen je Einheit sind vorhanden",
@@ -1132,6 +1448,103 @@ function getObjektkostenstellenBasis(
     objektkostenstellenByObjektDisplayId[objektDisplayId] ??
     objektkostenstellenByObjektDisplayId.DEFAULT
   );
+}
+
+function mapStandardSchluesselToVerteilschluessel(
+  standardSchluessel?: string,
+): Verteilschluessel {
+  switch (standardSchluessel) {
+    case "Fläche":
+      return "Fläche";
+    case "Einheit":
+      return "Einheit";
+    case "Direkt":
+      return "Direkt";
+    case "Person":
+    case "Personen":
+      return "Personen";
+    case "Verbrauch":
+      return "Direkt";
+    case "MEA":
+    default:
+      return "MEA";
+  }
+}
+
+function createObjektkostenstellenId(value: string) {
+  return normalizeLookupValue(value)
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "kostenstelle";
+}
+
+function getObjektkostenstellenAusObjektmodul(
+  objektDisplayId: string,
+  objectUtilitiesByStorageId: Record<string, ObjectModuleUtility[]>,
+  objectStorageKeyByDisplayId: Record<string, string>,
+): ObjektkostenstelleQuelle[] {
+  const basis = getObjektkostenstellenBasis(objektDisplayId);
+  const storageKey = getObjectStorageKeyByDisplayId(
+    objektDisplayId,
+    objectStorageKeyByDisplayId,
+  );
+
+  if (!storageKey) {
+    return basis;
+  }
+
+  const utilities = objectUtilitiesByStorageId[storageKey] ?? [];
+  if (utilities.length === 0) {
+    return basis;
+  }
+
+  const importedByName = new Map<string, ObjektkostenstelleQuelle>();
+  const basisByName = new Map(
+    basis.map((item) => [normalizeLookupValue(item.name), item] as const),
+  );
+
+  utilities.forEach((utility) => {
+    const kostenartMeta =
+      kostenarten.find((item) => item.id === utility.category) ?? null;
+    const name =
+      utility.label.trim() ||
+      kostenartMeta?.name ||
+      utility.category.trim();
+    const normalizedName = normalizeLookupValue(name);
+
+    if (normalizedName === "") {
+      return;
+    }
+
+    const existingBasis = basisByName.get(normalizedName);
+
+    importedByName.set(normalizedName, {
+      id:
+        existingBasis?.id ??
+        `objmod-${createObjektkostenstellenId(kostenartMeta?.id ?? name)}`,
+      name,
+      umlagefaehig:
+        existingBasis?.umlagefaehig ??
+        kostenartMeta?.umlagefaehigMieter ??
+        true,
+      verteilschluessel:
+        existingBasis?.verteilschluessel ??
+        mapStandardSchluesselToVerteilschluessel(
+          kostenartMeta?.standardSchluessel,
+        ),
+      art:
+        existingBasis?.art ??
+        (kostenartMeta?.aktivDefault ? "standard" : "optional"),
+    });
+  });
+
+  basis.forEach((item) => {
+    const normalizedName = normalizeLookupValue(item.name);
+    if (!importedByName.has(normalizedName)) {
+      importedByName.set(normalizedName, item);
+    }
+  });
+
+  return Array.from(importedByName.values());
 }
 
 function createKatalogPosition(
@@ -1342,9 +1755,14 @@ function createVorbereitetenReport(
   positionen: AbrechnungsPosition[],
   einheiten: Abrechnungseinheit[],
   reportFreigegeben = false,
+  wegSollEinheiten: Abrechnungseinheit[] = [],
 ): VorbereiteterReport {
   const verteilungAktiverPositionen = createVerteilungAktiverPositionen(positionen, einheiten);
-  const abschlusspruefung = createAbschlusspruefung(positionen, einheiten);
+  const abschlusspruefung = createAbschlusspruefung(
+    positionen,
+    einheiten,
+    wegSollEinheiten,
+  );
 
   const summen: ReportSummen = {
     summeGesamt: roundToCents(
@@ -1400,18 +1818,26 @@ function createFinalReportSnapshot(
   item: NebenkostenAbrechnung,
   positionen: AbrechnungsPosition[],
   einheiten: Abrechnungseinheit[],
+  wegSollEinheiten: Abrechnungseinheit[] = [],
 ): FinalReportSnapshot {
   return {
     freigegebenAm:
       item.positivGeprueftAm ?? item.geaendertAm ?? currentDateForDisplay(),
-    report: createVorbereitetenReport(item, positionen, einheiten, true),
+    report: createVorbereitetenReport(
+      item,
+      positionen,
+      einheiten,
+      true,
+      wegSollEinheiten,
+    ),
   };
 }
 
-export function NebenkostenAbrechnungen() {
+export function NebenkostenAbrechnungen({ documents }: NebenkostenAbrechnungenProps) {
   const [abrechnungen, setAbrechnungen] = useState<NebenkostenAbrechnung[]>([]);
   const [suchtext, setSuchtext] = useState("");
   const [objektFilter, setObjektFilter] = useState("ALLE");
+  const [reportYearFilter, setReportYearFilter] = useState("ALLE");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("AKTIV");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bearbeitenOpen, setBearbeitenOpen] = useState(false);
@@ -1436,6 +1862,13 @@ export function NebenkostenAbrechnungen() {
   const [finalReportSnapshotsByAbrechnungId, setFinalReportSnapshotsByAbrechnungId] =
     useState<Record<string, FinalReportSnapshot>>({});
   const [hasLoadedNebenkostenStorage, setHasLoadedNebenkostenStorage] = useState(false);
+  const [workspaceSyncError, setWorkspaceSyncError] = useState<string | null>(null);
+  const [listSyncError, setListSyncError] = useState<string | null>(null);
+  const [serverValidation, setServerValidation] =
+    useState<UtilityStatementValidationResponse | null>(null);
+  const [serverFilteredAbrechnungIds, setServerFilteredAbrechnungIds] = useState<string[] | null>(
+    null,
+  );
   const [hasLoadedObjectModule, setHasLoadedObjectModule] = useState(false);
   const [katalogEditorId, setKatalogEditorId] = useState<string | null>(null);
   const [katalogBetrag, setKatalogBetrag] = useState("");
@@ -1473,6 +1906,69 @@ export function NebenkostenAbrechnungen() {
     ) as Record<string, string>;
   }, [bekannteObjekte]);
 
+  function applyPersistedWorkspace(
+    persistedAbrechnungen: NebenkostenAbrechnung[],
+    persistedPositionen: Record<string, AbrechnungsPosition[]>,
+    persistedEinheiten: Record<string, Abrechnungseinheit[]>,
+    persistedFinalReports: Record<string, FinalReportSnapshot>,
+  ) {
+    setAbrechnungen(persistedAbrechnungen);
+    setPositionsByAbrechnungId(persistedPositionen);
+    setEinheitenByAbrechnungId(persistedEinheiten);
+    setFinalReportSnapshotsByAbrechnungId(persistedFinalReports);
+  }
+
+  function mapWorkspaceSettlementToAbrechnung(
+    item: UtilityStatementsWorkspaceSettlement,
+  ): NebenkostenAbrechnung {
+    return {
+      id: item.id,
+      objectId: item.objectId ?? null,
+      objektDisplayId: item.objektDisplayId,
+      objektName: item.objektName,
+      zeitraumVon: item.zeitraumVon,
+      zeitraumBis: item.zeitraumBis,
+      status: item.status as NebenkostenAbrechnung["status"],
+      erstelltAm: item.erstelltAm,
+      geaendertAm: item.geaendertAm,
+      positivGeprueftAm: item.positivGeprueftAm ?? undefined,
+    };
+  }
+
+  function buildSettlementPayload(
+    abrechnung: NebenkostenAbrechnung,
+    overrides?: {
+      status?: NebenkostenAbrechnung["status"];
+      geaendertAm?: string;
+      positivGeprueftAm?: string;
+      finalReportSnapshot?: FinalReportSnapshot | null;
+    },
+  ) {
+    return {
+      ...abrechnung,
+      objectId:
+        abrechnung.objectId ??
+        objectStorageKeyByDisplayId[normalizeDisplayId(abrechnung.objektDisplayId)] ??
+        null,
+      status: overrides?.status ?? abrechnung.status,
+      geaendertAm: overrides?.geaendertAm ?? abrechnung.geaendertAm,
+      positivGeprueftAm:
+        overrides?.positivGeprueftAm ?? abrechnung.positivGeprueftAm ?? null,
+      positions: positionsByAbrechnungId[abrechnung.id] ?? [],
+      einheiten: einheitenByAbrechnungId[abrechnung.id] ?? [],
+      finalReportSnapshot:
+        overrides?.finalReportSnapshot ??
+        finalReportSnapshotsByAbrechnungId[abrechnung.id] ??
+        null,
+    };
+  }
+
+  function buildWorkspacePayload() {
+    return {
+      settlements: abrechnungen.map((abrechnung) => buildSettlementPayload(abrechnung)),
+    };
+  }
+
   const auswahlObjekte = useMemo(() => {
     const result = new Map<string, LocalObjectReference>();
 
@@ -1506,7 +2002,17 @@ export function NebenkostenAbrechnungen() {
     [auswahlObjekte],
   );
 
-  const gefilterteAbrechnungen = useMemo(() => {
+  const reportYearOptionen = useMemo(() => {
+    return Array.from(
+      new Set(
+        abrechnungen
+          .map((item) => getReportYearFromAbrechnung(item))
+          .filter((item): item is number => item !== null),
+      ),
+    ).sort((left, right) => right - left);
+  }, [abrechnungen]);
+
+  const lokalGefilterteAbrechnungen = useMemo(() => {
     return abrechnungen.filter((item) => {
       const matchSuchtext =
         suchtext.trim() === "" ||
@@ -1525,9 +2031,23 @@ export function NebenkostenAbrechnungen() {
             ? item.status === "In Arbeit"
             : item.status === statusFilter;
 
-      return matchSuchtext && matchObjekt && matchStatus;
+      const reportYear = getReportYearFromAbrechnung(item);
+      const matchReportYear =
+        reportYearFilter === "ALLE" || String(reportYear ?? "") === reportYearFilter;
+
+      return matchSuchtext && matchObjekt && matchStatus && matchReportYear;
     });
-  }, [abrechnungen, objektFilter, statusFilter, suchtext]);
+  }, [abrechnungen, objektFilter, reportYearFilter, statusFilter, suchtext]);
+
+  const gefilterteAbrechnungen = useMemo(() => {
+    if (serverFilteredAbrechnungIds === null) {
+      return lokalGefilterteAbrechnungen;
+    }
+
+    const allowedIds = new Set(serverFilteredAbrechnungIds);
+
+    return abrechnungen.filter((item) => allowedIds.has(item.id));
+  }, [abrechnungen, lokalGefilterteAbrechnungen, serverFilteredAbrechnungIds]);
 
   useEffect(() => {
     if (gefilterteAbrechnungen.length === 0) {
@@ -1562,47 +2082,95 @@ export function NebenkostenAbrechnungen() {
   }, [selectedAbrechnungId]);
 
   useEffect(() => {
-    const gespeicherteAbrechnungen = readStorageValue<NebenkostenAbrechnung[] | null>(
-      NEBENKOSTEN_STORAGE_KEYS.abrechnungen,
-      null,
-    );
-    const gespeichertePositionen = readStorageValue<
-      Record<string, AbrechnungsPosition[]> | null
-    >(NEBENKOSTEN_STORAGE_KEYS.positionen, null);
-    const gespeicherteEinheiten = readStorageValue<
-      Record<string, Abrechnungseinheit[]> | null
-    >(NEBENKOSTEN_STORAGE_KEYS.einheiten, null);
-    const gespeicherteFinalReports = readStorageValue<
-      Record<string, FinalReportSnapshot> | null
-    >(NEBENKOSTEN_STORAGE_KEYS.finalReports, null);
+    let isCancelled = false;
 
-    const bereinigteAbrechnungen = Array.isArray(gespeicherteAbrechnungen)
-      ? gespeicherteAbrechnungen.filter(
-          (item) => !isLegacyMockObjectValue(String(item.objektName ?? "")),
-        )
-      : [];
+    async function loadWorkspace() {
+      try {
+        const workspace = await getUtilityStatementsWorkspace();
 
-    setAbrechnungen(bereinigteAbrechnungen);
+        if (isCancelled) {
+          return;
+        }
 
-    setPositionsByAbrechnungId(
-      gespeichertePositionen && typeof gespeichertePositionen === "object"
-        ? gespeichertePositionen
-        : {},
-    );
+        if (Array.isArray(workspace.settlements)) {
+          applyPersistedWorkspace(
+            workspace.settlements.map((item) => mapWorkspaceSettlementToAbrechnung(item)),
+            Object.fromEntries(
+              workspace.settlements.map((item) => [
+                item.id,
+                Array.isArray(item.positions)
+                  ? (item.positions as AbrechnungsPosition[])
+                  : [],
+              ]),
+            ),
+            Object.fromEntries(
+              workspace.settlements.map((item) => [
+                item.id,
+                Array.isArray(item.einheiten)
+                  ? (item.einheiten as Abrechnungseinheit[])
+                  : [],
+              ]),
+            ),
+            Object.fromEntries(
+              workspace.settlements
+                .filter((item) => item.finalReportSnapshot && typeof item.finalReportSnapshot === "object")
+                .map((item) => [item.id, item.finalReportSnapshot as FinalReportSnapshot]),
+            ),
+          );
+          setWorkspaceSyncError(null);
+          setHasLoadedNebenkostenStorage(true);
+          return;
+        }
+      } catch {
+        if (!isCancelled) {
+          setWorkspaceSyncError("Nebenkosten-Arbeitsstand konnte nicht aus der API geladen werden. Lokaler Stand wird verwendet.");
+        }
+      }
 
-    setEinheitenByAbrechnungId(
-      gespeicherteEinheiten && typeof gespeicherteEinheiten === "object"
-        ? gespeicherteEinheiten
-        : {},
-    );
+      if (isCancelled) {
+        return;
+      }
 
-    setFinalReportSnapshotsByAbrechnungId(
-      gespeicherteFinalReports && typeof gespeicherteFinalReports === "object"
-        ? gespeicherteFinalReports
-        : {},
-    );
+      const gespeicherteAbrechnungen = readStorageValue<NebenkostenAbrechnung[] | null>(
+        NEBENKOSTEN_STORAGE_KEYS.abrechnungen,
+        null,
+      );
+      const gespeichertePositionen = readStorageValue<
+        Record<string, AbrechnungsPosition[]> | null
+      >(NEBENKOSTEN_STORAGE_KEYS.positionen, null);
+      const gespeicherteEinheiten = readStorageValue<
+        Record<string, Abrechnungseinheit[]> | null
+      >(NEBENKOSTEN_STORAGE_KEYS.einheiten, null);
+      const gespeicherteFinalReports = readStorageValue<
+        Record<string, FinalReportSnapshot> | null
+      >(NEBENKOSTEN_STORAGE_KEYS.finalReports, null);
 
-    setHasLoadedNebenkostenStorage(true);
+      const bereinigteAbrechnungen = Array.isArray(gespeicherteAbrechnungen)
+        ? gespeicherteAbrechnungen.filter(
+            (item) => !isLegacyMockObjectValue(String(item.objektName ?? "")),
+          )
+        : [];
+
+      applyPersistedWorkspace(
+        bereinigteAbrechnungen,
+        gespeichertePositionen && typeof gespeichertePositionen === "object"
+          ? gespeichertePositionen
+          : {},
+        gespeicherteEinheiten && typeof gespeicherteEinheiten === "object"
+          ? gespeicherteEinheiten
+          : {},
+        gespeicherteFinalReports && typeof gespeicherteFinalReports === "object"
+          ? gespeicherteFinalReports
+          : {},
+      );
+      setHasLoadedNebenkostenStorage(true);
+    }
+
+    void loadWorkspace();
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -1610,18 +2178,100 @@ export function NebenkostenAbrechnungen() {
       return;
     }
 
-    writeStorageValue(NEBENKOSTEN_STORAGE_KEYS.abrechnungen, abrechnungen);
-    writeStorageValue(NEBENKOSTEN_STORAGE_KEYS.positionen, positionsByAbrechnungId);
-    writeStorageValue(NEBENKOSTEN_STORAGE_KEYS.einheiten, einheitenByAbrechnungId);
-    writeStorageValue(
-      NEBENKOSTEN_STORAGE_KEYS.finalReports,
-      finalReportSnapshotsByAbrechnungId,
-    );
+    let isCancelled = false;
+
+    async function loadFilteredSettlements() {
+      try {
+        const response = await listUtilityStatements({
+          q: suchtext.trim() === "" ? undefined : suchtext.trim(),
+          objectDisplayId: objektFilter === "ALLE" ? undefined : objektFilter,
+          status: statusFilter,
+          reportYear: reportYearFilter === "ALLE" ? undefined : reportYearFilter,
+        });
+
+        if (isCancelled) {
+          return;
+        }
+
+        setServerFilteredAbrechnungIds(
+          Array.isArray(response.settlements)
+            ? response.settlements.map((item) => item.id)
+            : [],
+        );
+        setListSyncError(null);
+      } catch {
+        if (isCancelled) {
+          return;
+        }
+
+        setServerFilteredAbrechnungIds(null);
+        setListSyncError(
+          "Abrechnungsbestand konnte nicht serverseitig geladen werden. Lokaler Filter wird verwendet.",
+        );
+      }
+    }
+
+    void loadFilteredSettlements();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [hasLoadedNebenkostenStorage, objektFilter, reportYearFilter, statusFilter, suchtext]);
+
+  useEffect(() => {
+    if (!selectedAbrechnungId) {
+      setServerValidation(null);
+      return;
+    }
+
+    let isCancelled = false;
+    const validationTargetId = selectedAbrechnungId;
+
+    async function loadValidation() {
+      try {
+        const validation = await getUtilityStatementValidation(validationTargetId);
+
+        if (!isCancelled) {
+          setServerValidation(validation);
+        }
+      } catch {
+        if (!isCancelled) {
+          setServerValidation(null);
+        }
+      }
+    }
+
+    void loadValidation();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedAbrechnungId, abrechnungen]);
+
+  useEffect(() => {
+    if (!hasLoadedNebenkostenStorage) {
+      return;
+    }
+
+    const handle = window.setTimeout(() => {
+      void syncUtilityStatementsWorkspace(buildWorkspacePayload())
+        .then(() => {
+          setWorkspaceSyncError(null);
+        })
+        .catch(() => {
+          setWorkspaceSyncError("Nebenkosten-Arbeitsstand konnte nicht serverseitig gespeichert werden.");
+        });
+    }, 400);
+
+    return () => {
+      window.clearTimeout(handle);
+    };
   }, [
     abrechnungen,
     einheitenByAbrechnungId,
     finalReportSnapshotsByAbrechnungId,
     hasLoadedNebenkostenStorage,
+    objectStorageKeyByDisplayId,
     positionsByAbrechnungId,
   ]);
 
@@ -1692,6 +2342,7 @@ export function NebenkostenAbrechnungen() {
 
         return {
           ...item,
+          objectId: match.id,
           objektName: readableName,
         };
       }),
@@ -1808,6 +2459,7 @@ export function NebenkostenAbrechnungen() {
           abrechnung,
           positionsByAbrechnungId[abrechnung.id] ?? [],
           einheitenByAbrechnungId[abrechnung.id] ?? [],
+          getWegSollEinheitenForAbrechnung(abrechnung),
         );
         hasChanged = true;
       });
@@ -1859,6 +2511,70 @@ export function NebenkostenAbrechnungen() {
     };
   }, [selectedEinheiten]);
 
+  function getWegSollEinheitenForAbrechnung(
+    abrechnung: NebenkostenAbrechnung | null,
+  ): Abrechnungseinheit[] {
+    if (!abrechnung) {
+      return [];
+    }
+
+    return (
+      createEinheitenFromObjektmodul(
+        abrechnung.id,
+        abrechnung.objektDisplayId,
+        abrechnung.objektName,
+        objectApartmentsByStorageId,
+        objectTenanciesByStorageId,
+        [],
+        objectStorageKeyByDisplayId,
+      ) ?? []
+    );
+  }
+
+  const selectedWegSollEinheiten = useMemo(() => {
+    return getWegSollEinheitenForAbrechnung(selectedAbrechnung);
+  }, [
+    objectApartmentsByStorageId,
+    objectStorageKeyByDisplayId,
+    objectTenanciesByStorageId,
+    selectedAbrechnung,
+  ]);
+
+  const selectedObjectStorageKey = useMemo(() => {
+    if (!selectedAbrechnung) {
+      return "";
+    }
+
+    return (
+      getObjectStorageKeyByDisplayId(
+        selectedAbrechnung.objektDisplayId,
+        objectStorageKeyByDisplayId,
+      ) ?? ""
+    );
+  }, [objectStorageKeyByDisplayId, selectedAbrechnung]);
+
+  const importedUtilitiesCount = useMemo(() => {
+    if (!selectedObjectStorageKey) {
+      return 0;
+    }
+
+    return objectUtilitiesByStorageId[selectedObjectStorageKey]?.length ?? 0;
+  }, [objectUtilitiesByStorageId, selectedObjectStorageKey]);
+
+  const importedEinheitenIds = useMemo(
+    () => new Set(selectedWegSollEinheiten.map((item) => item.id)),
+    [selectedWegSollEinheiten],
+  );
+
+  const importedEinheitenImArbeitsstand = useMemo(() => {
+    return selectedEinheiten.filter((item) => importedEinheitenIds.has(item.id)).length;
+  }, [importedEinheitenIds, selectedEinheiten]);
+
+  const manuellErgaenzteEinheiten = useMemo(() => {
+    return selectedEinheiten.filter((item) => !importedEinheitenIds.has(item.id)).length;
+  }, [importedEinheitenIds, selectedEinheiten]);
+
+
   const aktivePositionen = useMemo(() => {
     return selectedPositionen.filter((item) => isPositionAktiv(item));
   }, [selectedPositionen]);
@@ -1868,8 +2584,12 @@ export function NebenkostenAbrechnungen() {
   }, [selectedEinheiten, selectedPositionen]);
 
   const abschlusspruefung = useMemo(() => {
-    return createAbschlusspruefung(selectedPositionen, selectedEinheiten);
-  }, [selectedEinheiten, selectedPositionen]);
+    return createAbschlusspruefung(
+      selectedPositionen,
+      selectedEinheiten,
+      selectedWegSollEinheiten,
+    );
+  }, [selectedEinheiten, selectedPositionen, selectedWegSollEinheiten]);
 
   const abrechnungsergebnisJeEinheit = useMemo(() => {
     return createAbrechnungsergebnisJeEinheit(
@@ -1886,8 +2606,14 @@ export function NebenkostenAbrechnungen() {
       selectedPositionen,
       selectedEinheiten,
       false,
+      selectedWegSollEinheiten,
     );
-  }, [selectedAbrechnung, selectedPositionen, selectedEinheiten]);
+  }, [
+    selectedAbrechnung,
+    selectedEinheiten,
+    selectedPositionen,
+    selectedWegSollEinheiten,
+  ]);
 
   const finalReportSnapshot = useMemo(() => {
     if (!selectedAbrechnungId) return null;
@@ -1899,10 +2625,16 @@ export function NebenkostenAbrechnungen() {
     () => (finalerReport ? createEinzelreportTemplateData(finalerReport) : []),
     [finalerReport],
   );
+  const finalerVermieterreportBatch = useMemo(
+    () => (finalerReport ? createVermieterreportTemplateData(finalerReport) : []),
+    [finalerReport],
+  );
   const reportUebersicht = finalerReport ?? vorbereiteterReport;
   const reportIstFreigegeben = finalerReport !== null;
   const reportIstFreigabefaehig =
     vorbereiteterReport?.abschlusspruefung.istVollstaendig ?? false;
+  const serverseitigFreigabefaehig = serverValidation?.isReadyForApproval ?? false;
+  const freigabeBereit = reportIstFreigabefaehig && serverseitigFreigabefaehig;
 
   const selectedKatalogPosition = useMemo(() => {
     if (!katalogEditorId) return null;
@@ -1984,6 +2716,38 @@ export function NebenkostenAbrechnungen() {
     );
   }, [selectedEinheiten]);
 
+  const importstatusHinweis = useMemo(() => {
+    if (!selectedAbrechnung) {
+      return "";
+    }
+
+    if (!selectedObjectStorageKey) {
+      return "Zum Objekt gibt es aktuell noch keine erkennbare Verknüpfung ins Objektmodul.";
+    }
+
+    if (selectedWegSollEinheiten.length === 0 && importedUtilitiesCount === 0) {
+      return "Es wurden noch keine verwertbaren Einheiten oder Kostenarten aus dem Objektmodul gefunden.";
+    }
+
+    if (manuellErgaenzteEinheiten > 0) {
+      return "Im Report gibt es zusätzliche Einheiten, die nicht direkt aus dem Objektmodul stammen.";
+    }
+
+    if (correctionPositionen.length > 0 || offenePruefpunkte.length > 0) {
+      return "Die Stammdaten sind da, aber im Arbeitsstand gibt es noch Punkte zur Nachbearbeitung.";
+    }
+
+    return "Die aktuellen Stammdaten sind aus dem Objektmodul übernommen und im Report nutzbar.";
+  }, [
+    correctionPositionen.length,
+    importedUtilitiesCount,
+    manuellErgaenzteEinheiten,
+    offenePruefpunkte.length,
+    selectedAbrechnung,
+    selectedObjectStorageKey,
+    selectedWegSollEinheiten.length,
+  ]);
+
   const summen = useMemo(() => {
     const summeGesamt = selectedPositionen.reduce((sum, item) => sum + item.betrag, 0);
     const summeUmlagefaehig = selectedPositionen
@@ -2006,12 +2770,33 @@ export function NebenkostenAbrechnungen() {
   const countArchiviert = gefilterteAbrechnungen.filter(
     (item) => item.status === "Archiviert",
   ).length;
+  const selectedAbrechnungReportYear = selectedAbrechnung
+    ? getReportYearFromAbrechnung(selectedAbrechnung)
+    : null;
+  const selectedNebenkostenDocuments = selectedAbrechnung
+    ? documents.filter((document) =>
+      document.category === "Nebenkostenabrechnung" &&
+      document.objectName.toLowerCase().includes(selectedAbrechnung.objektDisplayId.toLowerCase()) &&
+      (selectedAbrechnungReportYear === null || document.reportYear === selectedAbrechnungReportYear),
+    )
+    : [];
+  const selectedJahresreports = selectedAbrechnung
+    ? documents.filter((document) =>
+      document.category === "Jahresreport WEG" &&
+      document.objectName.toLowerCase().includes(selectedAbrechnung.objektDisplayId.toLowerCase()) &&
+      (selectedAbrechnungReportYear === null || document.reportYear === selectedAbrechnungReportYear),
+    )
+    : [];
+  const selectedOpenNebenkostenDocumentCount = selectedNebenkostenDocuments.filter((document) =>
+    (document.openIssues?.length ?? 0) > 0 || document.actionState,
+  ).length;
 
   const istArchiviert = selectedAbrechnung?.status === "Archiviert";
 
   function resetFilters() {
     setSuchtext("");
     setObjektFilter("ALLE");
+    setReportYearFilter("ALLE");
     setStatusFilter("AKTIV");
   }
 
@@ -2099,7 +2884,7 @@ export function NebenkostenAbrechnungen() {
     setDialogOpen(false);
   }
 
-  function handleAction(item: NebenkostenAbrechnung, action: AbrechnungAktion) {
+  async function handleAction(item: NebenkostenAbrechnung, action: AbrechnungAktion) {
     if (action === "Öffnen") {
       setSelectedAbrechnungId(item.id);
       return;
@@ -2119,9 +2904,35 @@ export function NebenkostenAbrechnungen() {
     const pruefung = createAbschlusspruefung(
       aktuellePositionen,
       aktuelleEinheiten,
+      getWegSollEinheitenForAbrechnung(item),
     );
 
     if (!pruefung.istVollstaendig) {
+      setSelectedAbrechnungId(item.id);
+      resetKatalogEditor();
+      resetSonderpositionForm();
+      return;
+    }
+
+    let approvalValidation: UtilityStatementValidationResponse | null = null;
+    try {
+      approvalValidation = await getUtilityStatementValidation(item.id);
+      setServerValidation(approvalValidation);
+    } catch {
+      setWorkspaceSyncError(
+        "Server-Validierung der Nebenkostenabrechnung ist fehlgeschlagen. Freigabe wurde abgebrochen.",
+      );
+      setSelectedAbrechnungId(item.id);
+      return;
+    }
+
+    if (!approvalValidation.isReadyForApproval) {
+      const blockedReasons = approvalValidation.issues.map((issue) => issue.message).join(" | ");
+      setWorkspaceSyncError(
+        blockedReasons.trim() === ""
+          ? "Server-Validierung meldet offene Punkte. Freigabe abgebrochen."
+          : `Freigabe abgebrochen: ${blockedReasons}`,
+      );
       setSelectedAbrechnungId(item.id);
       resetKatalogEditor();
       resetSonderpositionForm();
@@ -2135,24 +2946,66 @@ export function NebenkostenAbrechnungen() {
       positivGeprueftAm: heute,
       geaendertAm: heute,
     };
-
-    setFinalReportSnapshotsByAbrechnungId((prev) => ({
-      ...prev,
-      [item.id]: createFinalReportSnapshot(
-        archivierteAbrechnung,
-        aktuellePositionen,
-        aktuelleEinheiten,
-      ),
-    }));
-
-    setAbrechnungen((prev) =>
-      prev.map((entry) =>
-        entry.id === item.id ? archivierteAbrechnung : entry,
-      ),
+    const finalReportSnapshot = createFinalReportSnapshot(
+      archivierteAbrechnung,
+      aktuellePositionen,
+      aktuelleEinheiten,
+      getWegSollEinheitenForAbrechnung(archivierteAbrechnung),
     );
-    setSelectedAbrechnungId(item.id);
-    resetKatalogEditor();
-    resetSonderpositionForm();
+
+    try {
+      const approvedSettlement = await approveUtilityStatement(
+        item.id,
+        buildSettlementPayload(item, {
+          status: "Archiviert",
+          geaendertAm: heute,
+          positivGeprueftAm: heute,
+          finalReportSnapshot,
+        }),
+      );
+
+      setFinalReportSnapshotsByAbrechnungId((prev) => ({
+        ...prev,
+        [item.id]:
+          approvedSettlement.finalReportSnapshot &&
+          typeof approvedSettlement.finalReportSnapshot === "object"
+            ? (approvedSettlement.finalReportSnapshot as FinalReportSnapshot)
+            : finalReportSnapshot,
+      }));
+      setAbrechnungen((prev) =>
+        prev.map((entry) =>
+          entry.id === item.id ? mapWorkspaceSettlementToAbrechnung(approvedSettlement) : entry,
+        ),
+      );
+      setWorkspaceSyncError(null);
+      setServerValidation((prev) =>
+        prev
+          ? { ...prev, isReadyForApproval: true, issues: [] }
+          : {
+              isReadyForApproval: true,
+              issues: [],
+              metrics: {
+                activePositionsCount: aktuellePositionen.filter((entry) => entry.betrag > 0).length,
+                unitsCount: aktuelleEinheiten.length,
+                totalAmount: roundToCents(
+                  aktuellePositionen.reduce((sum, entry) => sum + entry.betrag, 0),
+                ),
+                totalAdvancePayments: roundToCents(
+                  aktuelleEinheiten.reduce((sum, entry) => sum + entry.vorauszahlung, 0),
+                ),
+              },
+            },
+      );
+      setSelectedAbrechnungId(item.id);
+      resetKatalogEditor();
+      resetSonderpositionForm();
+    } catch (error) {
+      setWorkspaceSyncError(
+        error instanceof Error && error.message.trim() !== ""
+          ? error.message
+          : "Nebenkosten-Freigabe konnte nicht serverseitig gespeichert werden.",
+      );
+    }
   }
 
   function handleSaveEdit(payload: NebenkostenAbrechnung) {
@@ -2382,6 +3235,16 @@ export function NebenkostenAbrechnungen() {
 
   return (
     <div className="space-y-6">
+      {workspaceSyncError ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {workspaceSyncError}
+        </div>
+      ) : null}
+      {listSyncError ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {listSyncError}
+        </div>
+      ) : null}
       {selectedAbrechnung && reportUebersicht ? (
         <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
@@ -2433,11 +3296,59 @@ export function NebenkostenAbrechnungen() {
               <button
                 type="button"
                 onClick={() => handleAction(selectedAbrechnung, "Positiv geprüft")}
-                disabled={istArchiviert || !reportIstFreigabefaehig}
+                disabled={istArchiviert || !freigabeBereit}
                 className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 disabled:cursor-not-allowed disabled:border-zinc-100 disabled:text-zinc-400"
               >
                 Positiv prüfen
               </button>
+              <Link
+                href={buildNebenkostenDocumentsHref(selectedAbrechnung, "Nebenkostenabrechnung")}
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition hover:border-zinc-300 hover:bg-zinc-50"
+              >
+                Abrechnungsdokumente
+              </Link>
+              <Link
+                href={buildNebenkostenDocumentsHref(selectedAbrechnung, "Jahresreport WEG")}
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition hover:border-zinc-300 hover:bg-zinc-50"
+              >
+                Jahresreports
+              </Link>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                Dokumentenpfad
+              </p>
+              <p className="mt-2 text-base font-semibold text-zinc-900">
+                {selectedNebenkostenDocuments.length} Nebenkostenabrechnungen
+              </p>
+              <p className="mt-1 text-xs text-zinc-600">
+                {selectedOpenNebenkostenDocumentCount} offene Dokumentfälle im Ablagepfad
+              </p>
+            </div>
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                Jahresreports
+              </p>
+              <p className="mt-2 text-base font-semibold text-zinc-900">
+                {selectedJahresreports.length} Reports zum Berichtsjahr
+              </p>
+              <p className="mt-1 text-xs text-zinc-600">
+                Grundlage für Objektjahresstand und spätere Nachweise
+              </p>
+            </div>
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                Berichtsjahr
+              </p>
+              <p className="mt-2 text-base font-semibold text-zinc-900">
+                {selectedAbrechnungReportYear ?? "Ohne Jahr"}
+              </p>
+              <p className="mt-1 text-xs text-zinc-600">
+                Dokumentlinks öffnen direkt den passenden Jahreskontext
+              </p>
             </div>
           </div>
 
@@ -2450,7 +3361,7 @@ export function NebenkostenAbrechnungen() {
                 <h5 className="mt-2 text-lg font-semibold text-zinc-900">
                   {reportIstFreigegeben
                     ? "Report freigegeben"
-                    : reportIstFreigabefaehig
+                    : freigabeBereit
                       ? "Freigabe möglich"
                       : "Prüfung offen"}
                 </h5>
@@ -2461,10 +3372,13 @@ export function NebenkostenAbrechnungen() {
 
               <div className="flex flex-wrap gap-2">
                 <StatusPill>
-                  {vorbereiteterReport.abschlusspruefung.pruefpunkte.length} Prüfpunkte
+                  {vorbereiteterReport?.abschlusspruefung.pruefpunkte.length ?? 0} Prüfpunkte
                 </StatusPill>
                 <StatusPill>
-                  {vorbereiteterReport.metadaten.problemCount} offen
+                  {vorbereiteterReport?.metadaten.problemCount ?? 0} offen
+                </StatusPill>
+                <StatusPill>
+                  {serverValidation?.isReadyForApproval ? "Server prüfbar" : "Server prüft"}
                 </StatusPill>
               </div>
             </div>
@@ -2475,7 +3389,7 @@ export function NebenkostenAbrechnungen() {
                   Der finale Report ist freigegeben und vom laufenden Arbeitsstand getrennt.
                 </p>
               </div>
-            ) : reportIstFreigabefaehig ? (
+            ) : freigabeBereit ? (
               <div className="mt-4 rounded-2xl border border-teal-200 bg-teal-50 p-4">
                 <p className="text-sm font-medium text-teal-900">
                   Die Prüfung ist abgeschlossen. Mit „Positiv prüfen“ wird der finale Report freigegeben.
@@ -2486,8 +3400,83 @@ export function NebenkostenAbrechnungen() {
                 <p className="text-sm font-medium text-amber-900">
                   Fehler vorhanden. Solange Probleme offen sind, bleibt der Report ausgeblendet.
                 </p>
+                {serverValidation && serverValidation.issues.length > 0 ? (
+                  <div className="mt-3 space-y-2 text-sm text-amber-900">
+                    {serverValidation.issues.map((issue) => (
+                      <p key={issue.code}>- {issue.message}</p>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             )}
+
+            <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-sky-700">
+                    Stammdaten aus Objektmodul
+                  </p>
+                  <h5 className="mt-2 text-base font-semibold text-zinc-900">
+                    Importstatus für diesen Report
+                  </h5>
+                  <p className="mt-1 text-sm text-zinc-700">{importstatusHinweis}</p>
+                </div>
+
+                <StatusPill tone={selectedObjectStorageKey ? "blue" : "amber"}>
+                  {selectedObjectStorageKey ? "Objektmodul verbunden" : "Objektmodul offen"}
+                </StatusPill>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl border border-white/80 bg-white p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                    Einheiten importiert
+                  </p>
+                  <p className="mt-2 text-xl font-semibold text-zinc-900">
+                    {selectedWegSollEinheiten.length}
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-600">
+                    {importedEinheitenImArbeitsstand} im Report aktiv
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-white/80 bg-white p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                    Kostenarten aus Objektmodul
+                  </p>
+                  <p className="mt-2 text-xl font-semibold text-zinc-900">
+                    {importedUtilitiesCount}
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-600">
+                    {selectedPositionen.filter((item) => item.art !== "sonder").length} Positionen im Arbeitsstand
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-white/80 bg-white p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                    Einheiten nur im Report
+                  </p>
+                  <p className="mt-2 text-xl font-semibold text-zinc-900">
+                    {manuellErgaenzteEinheiten}
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-600">
+                    nicht aus dem Objektmodul übernommen
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-white/80 bg-white p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                    Noch offen
+                  </p>
+                  <p className="mt-2 text-xl font-semibold text-zinc-900">
+                    {offenePruefpunkte.length}
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-600">
+                    {correctionPositionen.length} Positionen mit Nacharbeit, {offenePruefpunkte.length} Prüfpunkte
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
 
           {!reportIstFreigegeben ? (
@@ -2855,24 +3844,62 @@ export function NebenkostenAbrechnungen() {
               <div className="flex justify-end">
                 <button
                   type="button"
-                  onClick={() => {
-                    const el = document.getElementById("finaler-report-batch");
-                    if (!el) return;
-                    const w = window.open("", "_blank", "width=900,height=700");
-                    if (!w) return;
-                    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Nebenkostenabrechnungen</title><style>body{font-family:Arial,sans-serif;padding:20mm;color:#111827;}table{width:100%;border-collapse:collapse;}td,th{padding:8px;border-bottom:1px solid #d1d5db;text-align:left;}@media print{body{padding:10mm;}}</style></head><body>${el.innerHTML}</body></html>`);
-                    w.document.close();
-                    w.focus();
-                    w.print();
-                    w.close();
-                  }}
+                  onClick={() =>
+                    printElementBySelector("#finaler-report-batch", "Nebenkostenabrechnungen")
+                  }
                   className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 transition"
                 >
                   🖨 Alle drucken
                 </button>
               </div>
+              {finalerEinzelreportBatch.length > 0 ? (
+                <div className="mt-4 space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                    Einzelreport als PDF
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {finalerEinzelreportBatch.map((report) => (
+                      <button
+                        type="button"
+                        key={report.reportId}
+                        onClick={() =>
+                          printReportById(
+                            report.reportId,
+                            `Nebenkostenabrechnung ${report.einheitName}`,
+                          )
+                        }
+                        className="inline-flex items-center justify-center rounded-lg border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                      >
+                        PDF {report.einheitName}
+                      </button>
+                    ))}
+                  </div>
+                  {finalerVermieterreportBatch.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {finalerVermieterreportBatch.map((report) => (
+                        <button
+                          type="button"
+                          key={report.reportId}
+                          onClick={() =>
+                            printOwnerReportById(report.reportId, `Vermieterreport ${report.eigentuemerName}`)
+                          }
+                          className="inline-flex items-center justify-center rounded-lg border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                        >
+                          PDF Vermieter {report.eigentuemerName}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div id="finaler-report-batch">
                 <NebenkostenEinzelreportBatch reports={finalerEinzelreportBatch} />
+                {finalerVermieterreportBatch.map((report) => (
+                  <NebenkostenVermieterreportTemplate
+                    key={`${report.objektName}-${report.eigentuemerName}`}
+                    data={report}
+                  />
+                ))}
               </div>
             </section>
           ) : null}
@@ -2917,7 +3944,7 @@ export function NebenkostenAbrechnungen() {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_280px_220px]">
+        <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_240px_180px_220px]">
           <label className="space-y-2">
             <span className="text-[11px] uppercase tracking-wide text-zinc-500">
               Suche
@@ -2943,6 +3970,24 @@ export function NebenkostenAbrechnungen() {
               {objektOptionen.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-[11px] uppercase tracking-wide text-zinc-500">
+              Jahr
+            </span>
+            <select
+              value={reportYearFilter}
+              onChange={(event) => setReportYearFilter(event.target.value)}
+              className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm text-zinc-900 outline-none transition focus:border-zinc-400"
+            >
+              <option value="ALLE">Alle Jahre</option>
+              {reportYearOptionen.map((year) => (
+                <option key={year} value={String(year)}>
+                  {year}
                 </option>
               ))}
             </select>
@@ -2989,4 +4034,3 @@ export function NebenkostenAbrechnungen() {
   );
 
 }
-

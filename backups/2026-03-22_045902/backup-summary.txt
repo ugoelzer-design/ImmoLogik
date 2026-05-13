@@ -1,0 +1,6 @@
+﻿Backup created: 2026-03-22T04:59:08
+Repository root: C:\Users\ugoel\immologik
+Target directory: C:\Users\ugoel\immologik\backups\2026-03-22_045902
+
+code_archive: C:\Users\ugoel\immologik\backups\2026-03-22_045902\immologik-code-2026-03-22_045902.zip
+postgres_dump: C:\Users\ugoel\immologik\backups\2026-03-22_045902\postgres-2026-03-22_045902.sql

@@ -1,58 +1,192 @@
-﻿import { Injectable, NotFoundException } from '@nestjs/common';
-
-type TenantRecord = {
-  id: string;
-  fullName: string;
-  objectName: string;
-  unit: string;
-  email: string;
-  phone: string;
-  status: 'Aktiv' | 'Ausstehend' | 'Beendet';
-};
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreateTenantDto } from './dto/create-tenant.dto';
 
 @Injectable()
 export class TenantsService {
-  private readonly tenants: TenantRecord[] = [
-    {
-      id: 'tenant-1',
-      fullName: 'Anna Becker',
-      objectName: 'Bergstraße 12',
-      unit: '2.OG links',
-      email: 'anna.becker@example.com',
-      phone: '0151 11111111',
-      status: 'Aktiv',
-    },
-    {
-      id: 'tenant-2',
-      fullName: 'Markus Klein',
-      objectName: 'Rheinallee 5',
-      unit: 'A-03',
-      email: 'markus.klein@example.com',
-      phone: '0151 22222222',
-      status: 'Ausstehend',
-    },
-    {
-      id: 'tenant-3',
-      fullName: 'Sabine Jäger',
-      objectName: 'Hafenstraße 21',
-      unit: 'EG',
-      email: 'sabine.jaeger@example.com',
-      phone: '0151 33333333',
-      status: 'Aktiv',
-    },
-  ];
+  constructor(private readonly prisma: PrismaService) {}
 
-  findAll() {
-    return this.tenants;
+  async findAll() {
+    const tenants = await this.prisma.mieter.findMany({
+      include: {
+        object: true,
+        rentUnit: true,
+      },
+      orderBy: [{ fullName: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    return tenants.map((tenant) => this.toResponse(tenant));
   }
 
-  findOne(id: string) {
-    const tenant = this.tenants.find((item) => item.id === id);
+  async findOne(id: string) {
+    const tenant = await this.prisma.mieter.findUnique({
+      where: { id },
+      include: {
+        object: true,
+        rentUnit: true,
+      },
+    });
 
     if (!tenant) {
       throw new NotFoundException('Mieter nicht gefunden.');
     }
 
-    return tenant;
+    return this.toResponse(tenant);
+  }
+
+  async create(dto: CreateTenantDto) {
+    await this.assertRelationConsistency(dto.objectId, dto.rentUnitId);
+
+    const tenant = await this.prisma.mieter.create({
+      data: {
+        objectId: dto.objectId,
+        rentUnitId: dto.rentUnitId,
+        fullName: dto.fullName,
+        email: dto.email,
+        phone: dto.phone,
+        status: this.persistStatus(dto.status),
+      },
+      include: {
+        object: true,
+        rentUnit: true,
+      },
+    });
+
+    return this.toResponse(tenant);
+  }
+
+  async update(id: string, dto: Partial<CreateTenantDto>) {
+    const existing = await this.prisma.mieter.findUnique({
+      where: { id },
+      include: {
+        object: true,
+        rentUnit: true,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Mieter nicht gefunden.');
+    }
+
+    const nextObjectId = dto.objectId ?? existing.objectId;
+    const nextRentUnitId = dto.rentUnitId ?? existing.rentUnitId;
+    await this.assertRelationConsistency(nextObjectId, nextRentUnitId);
+
+    const tenant = await this.prisma.mieter.update({
+      where: { id },
+      data: {
+        ...(dto.objectId !== undefined ? { objectId: dto.objectId } : {}),
+        ...(dto.rentUnitId !== undefined ? { rentUnitId: dto.rentUnitId } : {}),
+        ...(dto.fullName !== undefined ? { fullName: dto.fullName } : {}),
+        ...(dto.email !== undefined ? { email: dto.email } : {}),
+        ...(dto.phone !== undefined ? { phone: dto.phone } : {}),
+        ...(dto.status !== undefined
+          ? { status: this.persistStatus(dto.status) }
+          : {}),
+      },
+      include: {
+        object: true,
+        rentUnit: true,
+      },
+    });
+
+    return this.toResponse(tenant);
+  }
+
+  async remove(id: string) {
+    const tenant = await this.prisma.mieter.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            vertraege: true,
+          },
+        },
+      },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Mieter nicht gefunden.');
+    }
+
+    if (tenant._count.vertraege > 0) {
+      throw new BadRequestException(
+        'Mieter kann nicht gelöscht werden, solange noch Verträge verknüpft sind.',
+      );
+    }
+
+    return this.prisma.mieter.delete({ where: { id } });
+  }
+
+  private async assertRelationConsistency(
+    objectId: string,
+    rentUnitId: string,
+  ) {
+    const rentUnit = await this.prisma.rentUnit.findUnique({
+      where: { id: rentUnitId },
+    });
+
+    if (!rentUnit) {
+      throw new BadRequestException('Mieteinheit nicht gefunden.');
+    }
+
+    if (rentUnit.objectId !== objectId) {
+      throw new BadRequestException(
+        'Mieteinheit gehört nicht zum gewählten Objekt.',
+      );
+    }
+  }
+
+  private toResponse(tenant: {
+    id: string;
+    objectId: string;
+    rentUnitId: string;
+    fullName: string;
+    email: string;
+    phone: string;
+    status: string;
+    object: { id: string; name: string; displayId: string };
+    rentUnit: { id: string; unitLabel: string };
+    createdAt?: Date;
+    updatedAt?: Date;
+  }) {
+    return {
+      id: tenant.id,
+      objectId: tenant.objectId,
+      rentUnitId: tenant.rentUnitId,
+      fullName: tenant.fullName,
+      objectName: tenant.object.name,
+      objectDisplayId: tenant.object.displayId,
+      unit: tenant.rentUnit.unitLabel,
+      email: tenant.email,
+      phone: tenant.phone,
+      status: this.normalizeStatus(tenant.status),
+    };
+  }
+
+  private normalizeStatus(status: string) {
+    switch (status) {
+      case 'In Bearbeitung':
+        return 'Ausstehend';
+      default:
+        return status;
+    }
+  }
+
+  private persistStatus(status?: string) {
+    switch (status) {
+      case 'Ausstehend':
+        return 'In Bearbeitung';
+      case undefined:
+      case null:
+      case '':
+        return 'Aktiv';
+      default:
+        return status;
+    }
   }
 }

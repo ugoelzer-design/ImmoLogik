@@ -6,7 +6,7 @@ export type NebenkostenTabId = "uebersicht" | "abrechnungen";
 
 export type AbrechnungStatus = "In Arbeit" | "Archiviert";
 
-export type AbrechnungAktion = "Oeffnen" | "Bearbeiten" | "Positiv geprueft";
+export type AbrechnungAktion = "Öffnen" | "Bearbeiten" | "Positiv geprüft";
 
 export type StatusFilter = "AKTIV" | "ALLE" | "In Arbeit" | "Archiviert";
 
@@ -23,6 +23,7 @@ export type NebenkostenTab = {
 
 export type NebenkostenAbrechnung = {
   id: string;
+  objectId?: string | null;
   objektDisplayId: string;
   objektName: string;
   zeitraumVon: string;
@@ -36,7 +37,7 @@ export type NebenkostenAbrechnung = {
 export type BeispielObjekt = {
   displayId: string;
   name: string;
-  adresse: string;
+  adresse?: string;
 };
 
 export type VorbereiteteAbrechnung = {

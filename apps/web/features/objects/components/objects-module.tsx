@@ -5,6 +5,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { ObjectList } from "@/features/objects/components/object-list";
 import { ObjectDetail } from "@/features/objects/components/object-detail";
 import { NewObjectForm } from "@/features/objects/components/new-object-form";
+import type { ImmoDocument } from "@/types/document";
 import {
   createObject,
   type CreateObjectInput,
@@ -13,13 +14,14 @@ import type { ImmoObject } from "@/types/object";
 
 type ObjectsModuleProps = {
   initialObjects: ImmoObject[];
+  documents: ImmoDocument[];
 };
 
 function sortObjectsByDisplayId(objects: ImmoObject[]): ImmoObject[] {
   return [...objects].sort((a, b) => a.displayId.localeCompare(b.displayId));
 }
 
-export function ObjectsModule({ initialObjects }: ObjectsModuleProps) {
+export function ObjectsModule({ initialObjects, documents }: ObjectsModuleProps) {
   const [objects, setObjects] = useState<ImmoObject[]>(
     sortObjectsByDisplayId(initialObjects)
   );
@@ -99,6 +101,15 @@ export function ObjectsModule({ initialObjects }: ObjectsModuleProps) {
       ) : null}
 
       {selectedObject ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          Aktiver Objektanker:{" "}
+          <span className="font-semibold">
+            {selectedObject.displayId}
+          </span>
+        </div>
+      ) : null}
+
+      {selectedObject ? (
         <div className="space-y-4">
           <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             <button
@@ -114,7 +125,7 @@ export function ObjectsModule({ initialObjects }: ObjectsModuleProps) {
             </p>
           </div>
 
-          <ObjectDetail object={selectedObject} />
+          <ObjectDetail object={selectedObject} documents={documents} />
         </div>
       ) : (
         <>

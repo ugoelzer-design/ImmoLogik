@@ -4,8 +4,10 @@ type RequestOptions = RequestInit & {
   query?: Record<string, QueryValue>;
 };
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:3000";
+export const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ||
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+  "http://localhost:3000";
 
 function buildUrl(path: string, query?: Record<string, QueryValue>) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -62,6 +64,13 @@ export const apiClient = {
     request<T>(path, {
       ...options,
       method: "POST",
+      body: body ? JSON.stringify(body) : undefined,
+    }),
+
+  put: <T, B = unknown>(path: string, body?: B, options?: Omit<RequestOptions, "method" | "body">) =>
+    request<T>(path, {
+      ...options,
+      method: "PUT",
       body: body ? JSON.stringify(body) : undefined,
     }),
 

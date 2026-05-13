@@ -1,0 +1,6 @@
+Backup created: 2026-04-02T10:06:37+02:00
+Repository root: /sessions/charming-lucid-newton/mnt/immologik
+Target directory: /sessions/charming-lucid-newton/mnt/immologik/backups/2026-04-02_100635
+
+code_archive: immologik-code-2026-04-02_100635.tar.gz
+note: DB/MinIO-Backup uebersprungen (kein Docker im Sandbox); bitte via scripts/backup-immologik.ps1 nachholen.

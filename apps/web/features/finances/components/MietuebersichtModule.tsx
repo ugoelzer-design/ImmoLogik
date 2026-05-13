@@ -1,46 +1,56 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-type RentUnit = {
-  id: string;
-  objectId: string;
-  unitLabel: string;
-  tenant: string;
-  sollMiete: number;
-  istMiete: number;
-  zahlungsStatus: string;
-  faelligAm: string;
-};
+import {
+  createRentUnit,
+  deleteRentUnit,
+  getRentUnits,
+  type RentUnit,
+} from "@/features/finances/services/rent-units.service";
 
 export function MietuebersichtModule() {
   const [units, setUnits] = useState<RentUnit[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ objectId: "", unitLabel: "", tenant: "", sollMiete: "", istMiete: "", zahlungsStatus: "Offen", faelligAm: "" });
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("http://localhost:3000/rent-units")
-      .then((r) => r.json())
-      .then((data) => { setUnits(data); setLoading(false); })
-      .catch(() => setLoading(false));
+    getRentUnits()
+      .then((data) => {
+        setUnits(data);
+        setLoading(false);
+      })
+      .catch(() => {
+        setError("Mieteinheiten konnten nicht geladen werden.");
+        setLoading(false);
+      });
   }, []);
 
   async function handleCreate() {
-    const res = await fetch("http://localhost:3000/rent-units", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, sollMiete: parseFloat(form.sollMiete), istMiete: parseFloat(form.istMiete || "0") }),
-    });
-    const newUnit = await res.json();
-    setUnits((prev) => [...prev, newUnit]);
-    setShowForm(false);
-    setForm({ objectId: "", unitLabel: "", tenant: "", sollMiete: "", istMiete: "", zahlungsStatus: "Offen", faelligAm: "" });
+    try {
+      setError(null);
+      const newUnit = await createRentUnit({
+        ...form,
+        sollMiete: parseFloat(form.sollMiete),
+        istMiete: parseFloat(form.istMiete || "0"),
+      });
+      setUnits((prev) => [...prev, newUnit]);
+      setShowForm(false);
+      setForm({ objectId: "", unitLabel: "", tenant: "", sollMiete: "", istMiete: "", zahlungsStatus: "Offen", faelligAm: "" });
+    } catch {
+      setError("Mieteinheit konnte nicht angelegt werden.");
+    }
   }
 
   async function handleDelete(id: string) {
-    await fetch(`http://localhost:3000/rent-units/${id}`, { method: "DELETE" });
-    setUnits((prev) => prev.filter((u) => u.id !== id));
+    try {
+      setError(null);
+      await deleteRentUnit(id);
+      setUnits((prev) => prev.filter((u) => u.id !== id));
+    } catch {
+      setError("Mieteinheit konnte nicht gelöscht werden.");
+    }
   }
 
   const totalSoll = units.reduce((s, u) => s + u.sollMiete, 0);
@@ -69,6 +79,12 @@ export function MietuebersichtModule() {
           {showForm ? "Abbrechen" : "+ Einheit anlegen"}
         </button>
       </div>
+
+      {error ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </div>
+      ) : null}
 
       {showForm && (
         <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm space-y-4">

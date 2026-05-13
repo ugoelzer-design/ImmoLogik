@@ -11,6 +11,8 @@ export type ImmoObject = {
   occupancy: string;
   monthlyTargetRent: string;
   note: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type ObjectUnitStatus = "frei" | "vermietet" | "reserviert" | "inaktiv";
