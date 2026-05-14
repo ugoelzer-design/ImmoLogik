@@ -3,6 +3,23 @@ export type DashboardActivity = {
   date: string;
 };
 
+type ContractMetricInput = {
+  endDate?: string | null;
+  status?: string | null;
+};
+
+type DocumentMetricInput = {
+  actionState?: string | null;
+  openIssues?: string[];
+  status?: string | null;
+  fileAvailable?: boolean | null;
+};
+
+type ReadingCampaignMetricInput = {
+  status?: string | null;
+  recipients?: Array<{ status?: string | null; submittedAt?: string | null }>;
+};
+
 function hasDate<T extends { date?: string }>(entry: T): entry is T & { date: string } {
   return typeof entry.date === "string" && entry.date.length > 0;
 }
@@ -20,6 +37,7 @@ export function buildRecentActivities(
   objects: Array<{ name: string; createdAt?: string }>,
   documents: Array<{ title: string; createdAt?: string }>,
   rentUnits: Array<{ unitLabel: string; createdAt?: string }>,
+  campaigns: Array<{ object?: { name: string }; reportYear: number; createdAt?: string }> = [],
 ): DashboardActivity[] {
   return [
     ...objects.slice(0, 2).map((object) => ({
@@ -34,6 +52,10 @@ export function buildRecentActivities(
       text: `Mieteinheit angelegt: ${unit.unitLabel}`,
       date: unit.createdAt,
     })),
+    ...campaigns.slice(0, 2).map((campaign) => ({
+      text: `Ablesekampagne angelegt: ${campaign.object?.name ?? "Objekt"} ${campaign.reportYear}`,
+      date: campaign.createdAt,
+    })),
   ]
     .filter(hasDate)
     .sort((left, right) => toTimestamp(right.date) - toTimestamp(left.date))
@@ -46,4 +68,51 @@ export function countRecentDocuments(
 ) {
   const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
   return documents.filter((document) => toTimestamp(document.createdAt) > sevenDaysAgo).length;
+}
+
+export function countExpiringContracts(
+  contracts: ContractMetricInput[],
+  now = Date.now(),
+) {
+  const ninetyDaysFromNow = now + 90 * 24 * 60 * 60 * 1000;
+
+  return contracts.filter((contract) => {
+    if (contract.status === "Läuft aus" || contract.status === "In Prüfung") {
+      return true;
+    }
+
+    const endDate = toTimestamp(contract.endDate);
+    return endDate > now && endDate <= ninetyDaysFromNow;
+  }).length;
+}
+
+export function countOpenDocumentCases(documents: DocumentMetricInput[]) {
+  return documents.filter((document) => {
+    if (document.actionState) {
+      return true;
+    }
+
+    if (document.fileAvailable === false) {
+      return true;
+    }
+
+    if ((document.openIssues ?? []).length > 0) {
+      return true;
+    }
+
+    return document.status === "Fehlt" || document.status === "In Prüfung";
+  }).length;
+}
+
+export function countOpenReadingCampaigns(campaigns: ReadingCampaignMetricInput[]) {
+  return campaigns.filter((campaign) => {
+    if (campaign.status === "offen") {
+      return true;
+    }
+
+    const recipients = campaign.recipients ?? [];
+    return recipients.some(
+      (recipient) => recipient.status !== "eingereicht" && !recipient.submittedAt,
+    );
+  }).length;
 }

@@ -11,16 +11,18 @@ type DashboardOverviewProps = {
   vertraegeCount: number;
   vertraegeAblaufend: number;
   dokumenteCount: number;
-  dokumenteNeu: number;
+  dokumenteOffen: number;
+  ablesekampagnenOffen: number;
   recentActivities: Activity[];
 };
 
-export function DashboardOverview({ objectCount, mieterCount, mieterAktiv, mieterAusstehend, vertraegeCount, vertraegeAblaufend, dokumenteCount, dokumenteNeu, recentActivities }: DashboardOverviewProps) {
+export function DashboardOverview({ objectCount, mieterCount, mieterAktiv, mieterAusstehend, vertraegeCount, vertraegeAblaufend, dokumenteCount, dokumenteOffen, ablesekampagnenOffen, recentActivities }: DashboardOverviewProps) {
   const stats = [
     { label: "WEGs", value: objectCount, hint: "Aktueller Bestand" },
     { label: "Mieter", value: mieterCount, hint: `${mieterAktiv} aktiv, ${mieterAusstehend} ausstehend` },
     { label: "Verträge", value: vertraegeCount, hint: vertraegeAblaufend > 0 ? `${vertraegeAblaufend} laufen bald aus` : "Alle aktuell" },
-    { label: "Dokumente", value: dokumenteCount, hint: dokumenteNeu > 0 ? `${dokumenteNeu} neue Uploads` : "Keine neuen" },
+    { label: "Dokumente", value: dokumenteCount, hint: dokumenteOffen > 0 ? `${dokumenteOffen} offene Fälle` : "Keine offenen Fälle" },
+    { label: "Ablesungen", value: ablesekampagnenOffen, hint: ablesekampagnenOffen > 0 ? "Offene Kampagnen" : "Keine offenen Kampagnen" },
   ];
 
   return (
@@ -30,7 +32,7 @@ export function DashboardOverview({ objectCount, mieterCount, mieterAktiv, miete
         <p className="mt-1 text-sm text-zinc-600">Operative Übersicht für WEGs, Verträge, Mieter und Dokumente.</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         {stats.map((stat) => (
           <StatCard key={stat.label} label={stat.label} value={stat.value} hint={stat.hint} />
         ))}
@@ -50,12 +52,13 @@ export function DashboardOverview({ objectCount, mieterCount, mieterAktiv, miete
           </ul>
         </SectionCard>
 
-        <SectionCard title="Hinweise" description="Handlungsbedarf im Überblick.">
+        <SectionCard title="Hinweise" description="Echter Handlungsbedarf aus den aktuellen API-Daten.">
           <ul className="space-y-3">
             {vertraegeAblaufend > 0 && <li className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">{vertraegeAblaufend} Vertrag/Verträge läuft/laufen bald aus</li>}
             {mieterAusstehend > 0 && <li className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">{mieterAusstehend} Mieter ausstehend</li>}
-            {dokumenteNeu > 0 && <li className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">{dokumenteNeu} neue Dokumente in den letzten 7 Tagen</li>}
-            {vertraegeAblaufend === 0 && mieterAusstehend === 0 && dokumenteNeu === 0 && (
+            {dokumenteOffen > 0 && <li className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">{dokumenteOffen} offene Dokumentfälle</li>}
+            {ablesekampagnenOffen > 0 && <li className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">{ablesekampagnenOffen} offene Ablesekampagnen</li>}
+            {vertraegeAblaufend === 0 && mieterAusstehend === 0 && dokumenteOffen === 0 && ablesekampagnenOffen === 0 && (
               <li className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">Kein akuter Handlungsbedarf.</li>
             )}
           </ul>

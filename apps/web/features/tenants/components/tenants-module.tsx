@@ -7,6 +7,7 @@ import { createTenant, deleteTenant, updateTenant } from "@/features/tenants/ser
 import { SectionCard } from "@/components/ui/section-card";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import type { Contract } from "@/types/contract";
 import type { ImmoDocument } from "@/types/document";
 import type { ImmoObject } from "@/types/object";
 import type { Tenant, TenantInput, TenantStatus } from "@/types/tenant";
@@ -16,6 +17,7 @@ type TenantsModuleProps = {
   objects: ImmoObject[];
   rentUnits: RentUnit[];
   documents: ImmoDocument[];
+  contracts?: Contract[];
 };
 
 type TenantFormState = TenantInput;
@@ -64,7 +66,38 @@ function buildTenantDocumentsHref(tenant: Tenant) {
   return `/dokumente?${searchParams.toString()}`;
 }
 
-export function TenantsModule({ tenants: initialTenants, objects, rentUnits, documents }: TenantsModuleProps) {
+function buildTenantContractDocumentsHref(tenant: Tenant) {
+  const searchParams = new URLSearchParams({
+    objectId: tenant.objectId,
+    rentUnitId: tenant.rentUnitId,
+    category: "Mietvertrag",
+  });
+
+  return `/dokumente?${searchParams.toString()}`;
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("de-DE", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function getContractVariant(status: string) {
+  switch (status) {
+    case "Aktiv":
+      return "success";
+    case "In Prüfung":
+      return "warning";
+    case "Läuft aus":
+      return "danger";
+    default:
+      return "muted";
+  }
+}
+
+export function TenantsModule({ tenants: initialTenants, objects, rentUnits, documents, contracts = [] }: TenantsModuleProps) {
   const [tenants, setTenants] = useState<Tenant[]>(initialTenants);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -92,6 +125,29 @@ export function TenantsModule({ tenants: initialTenants, objects, rentUnits, doc
     return getTenantDocuments(tenant).filter((document) =>
       (document.openIssues?.length ?? 0) > 0 || document.actionState,
     ).length;
+  }
+
+  function getTenantContracts(tenant: Tenant) {
+    return contracts.filter((contract) =>
+      contract.tenantId === tenant.id ||
+      (
+        contract.objectId === tenant.objectId &&
+        contract.rentUnitId === tenant.rentUnitId &&
+        contract.tenantName === tenant.fullName
+      ),
+    );
+  }
+
+  function getTenantRentUnit(tenant: Tenant) {
+    return rentUnits.find((unit) => unit.id === tenant.rentUnitId) ?? null;
+  }
+
+  function getTenantContractDocuments(tenant: Tenant) {
+    return getTenantDocuments(tenant).filter((document) => document.category === "Mietvertrag");
+  }
+
+  function getTenantAccessState(tenant: Tenant) {
+    return tenant.email.trim() ? "Vorbereitet" : "E-Mail fehlt";
   }
 
   const availableUnits = useMemo(
@@ -343,7 +399,16 @@ export function TenantsModule({ tenants: initialTenants, objects, rentUnits, doc
             <p className="text-sm text-zinc-500">Noch keine Mieter vorhanden.</p>
           ) : null}
 
-          {tenants.map((item) => (
+          {tenants.map((item) => {
+            const tenantContracts = getTenantContracts(item);
+            const primaryContract = tenantContracts[0] ?? null;
+            const rentUnit = getTenantRentUnit(item);
+            const tenantDocuments = getTenantDocuments(item);
+            const tenantOpenDocuments = getTenantOpenDocumentCount(item);
+            const contractDocuments = getTenantContractDocuments(item);
+            const accessState = getTenantAccessState(item);
+
+            return (
             <article
               key={item.id}
               className="rounded-xl border border-zinc-200 bg-zinc-50 p-4"
@@ -358,7 +423,7 @@ export function TenantsModule({ tenants: initialTenants, objects, rentUnits, doc
                     {item.email} · {item.phone}
                   </p>
                   <p className="mt-2 text-xs text-zinc-500">
-                    {getTenantDocuments(item).length} Dokumente · {getTenantOpenDocumentCount(item)} offene Dokumentfälle
+                    {tenantDocuments.length} Dokumente · {tenantOpenDocuments} offene Dokumentfälle
                   </p>
                 </div>
 
@@ -389,8 +454,74 @@ export function TenantsModule({ tenants: initialTenants, objects, rentUnits, doc
                   </button>
                 </div>
               </div>
+
+              <div className="mt-4 grid gap-3 lg:grid-cols-4">
+                <div className="rounded-xl border border-zinc-200 bg-white p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-zinc-500">Vertrag</p>
+                  {primaryContract ? (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-sm font-medium text-zinc-900">{primaryContract.title}</p>
+                      <p className="text-xs text-zinc-500">
+                        {primaryContract.startDate} bis {primaryContract.endDate}
+                      </p>
+                      <StatusBadge
+                        label={primaryContract.status}
+                        variant={getContractVariant(primaryContract.status)}
+                      />
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-amber-700">Kein Vertrag verknüpft</p>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-zinc-200 bg-white p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-zinc-500">Einheit / Miete</p>
+                  {rentUnit ? (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-sm font-medium text-zinc-900">
+                        Soll {formatMoney(rentUnit.sollMiete)} · Ist {formatMoney(rentUnit.istMiete)}
+                      </p>
+                      <p className="text-xs text-zinc-500">
+                        {rentUnit.zahlungsStatus} · fällig am {rentUnit.faelligAm}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-zinc-500">Keine Mietdaten vorhanden</p>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-zinc-200 bg-white p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-zinc-500">Dokumente</p>
+                  <p className="mt-2 text-sm font-medium text-zinc-900">
+                    {contractDocuments.length} Mietvertrag · {tenantOpenDocuments} offen
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Link
+                      href={buildTenantContractDocumentsHref(item)}
+                      className="text-xs font-medium text-blue-700 hover:text-blue-900"
+                    >
+                      Mietvertrag
+                    </Link>
+                    <Link
+                      href={buildTenantDocumentsHref(item)}
+                      className="text-xs font-medium text-blue-700 hover:text-blue-900"
+                    >
+                      Alle Unterlagen
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-zinc-200 bg-white p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-zinc-500">Mieterzugang</p>
+                  <p className="mt-2 text-sm font-medium text-zinc-900">{accessState}</p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Stammdaten, Vertrag, Dokumente und Ablesungen als künftiger Self-Service.
+                  </p>
+                </div>
+              </div>
             </article>
-          ))}
+          );
+          })}
         </div>
       </SectionCard>
     </section>

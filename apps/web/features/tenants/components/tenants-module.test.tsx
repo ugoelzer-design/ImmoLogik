@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TenantsModule } from "./tenants-module";
+import type { Contract } from "@/types/contract";
 import type { ImmoDocument } from "@/types/document";
 import type { ImmoObject } from "@/types/object";
 import type { Tenant } from "@/types/tenant";
@@ -56,6 +57,23 @@ const tenants: Tenant[] = [
     unit: "WE 01",
     email: "anna@example.test",
     phone: "0123456789",
+    status: "Aktiv",
+  },
+];
+
+const contracts: Contract[] = [
+  {
+    id: "contract-1",
+    objectId: "obj-1",
+    tenantId: "tenant-1",
+    rentUnitId: "unit-1",
+    title: "Mietvertrag Anna Becker",
+    objectName: "Sonnenhof",
+    objectDisplayId: "WEG-001",
+    tenantName: "Anna Becker",
+    unit: "WE 01",
+    startDate: "2026-01-01",
+    endDate: "2027-12-31",
     status: "Aktiv",
   },
 ];
@@ -120,6 +138,32 @@ describe("TenantsModule", () => {
     expect(screen.getByRole("link", { name: "Dokumente" })).toHaveAttribute(
       "href",
       "/dokumente?objectId=obj-1&rentUnitId=unit-1",
+    );
+  });
+
+  it("shows the linked tenant contract, rent status and prepared tenant access", () => {
+    render(
+      <TenantsModule
+        tenants={tenants}
+        objects={objects}
+        rentUnits={rentUnits}
+        documents={documents}
+        contracts={contracts}
+      />,
+    );
+
+    expect(screen.getByText("Mietvertrag Anna Becker")).toBeInTheDocument();
+    expect(screen.getByText("2026-01-01 bis 2027-12-31")).toBeInTheDocument();
+    expect(screen.getByText((_, node) =>
+      node?.textContent === "Soll 1.000 € · Ist 1.000 €",
+    )).toBeInTheDocument();
+    expect(screen.getByText((_, node) =>
+      node?.textContent === "Bezahlt · fällig am 2026-04-01",
+    )).toBeInTheDocument();
+    expect(screen.getByText("Vorbereitet")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Mietvertrag" })).toHaveAttribute(
+      "href",
+      "/dokumente?objectId=obj-1&rentUnitId=unit-1&category=Mietvertrag",
     );
   });
 });

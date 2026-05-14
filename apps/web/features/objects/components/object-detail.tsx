@@ -9,18 +9,32 @@ import {
   type SetStateAction,
 } from "react";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { createMissingDocument } from "@/features/documents/services/documents.service";
+import type { RentUnit } from "@/features/finances/services/rent-units.service";
+import {
+  buildDocumentRequirements,
+  getMissingDocumentRequirements,
+  type DocumentRequirement,
+} from "@/features/documents/utils/document-requirements";
+import type { Contract } from "@/types/contract";
 import {
   OBJECT_MODULE_STORAGE_KEYS,
   readStorageRecord,
   writeStorageRecord,
 } from "@/features/finances/utils/nebenkosten-storage";
 import type { ImmoDocument } from "@/types/document";
+import type { ReadingCampaign } from "@/types/meter-reading";
 import type { ImmoObject } from "@/types/object";
+import type { Tenant } from "@/types/tenant";
 import { kostenarten } from "../../shared/kostenarten";
 
 type ObjectDetailProps = {
   object: ImmoObject | undefined;
   documents: ImmoDocument[];
+  tenants?: Tenant[];
+  contracts?: Contract[];
+  rentUnits?: RentUnit[];
+  readingCampaigns?: ReadingCampaign[];
 };
 
 type SectionKey =
@@ -1555,24 +1569,244 @@ function FocusHeader({
   );
 }
 
-function PlaceholderSection({
-  title,
-  text,
-}: {
-  title: string;
-  text: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-5">
-      <h3 className="text-lg font-semibold text-zinc-900">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-zinc-600">{text}</p>
-    </div>
-  );
-}
-
 function getDocumentTimestamp(value: string) {
   const parsed = new Date(value).getTime();
   return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function isOpenDocumentCase(document: ImmoDocument) {
+  return (
+    document.actionState !== null && document.actionState !== undefined ||
+    document.fileAvailable === false ||
+    (document.openIssues?.length ?? 0) > 0 ||
+    document.status === "Fehlt" ||
+    document.status === "In Prüfung"
+  );
+}
+
+function isOpenReadingCampaign(campaign: ReadingCampaign) {
+  if (campaign.status === "offen") {
+    return true;
+  }
+
+  return campaign.recipients.some(
+    (recipient) => recipient.status !== "eingereicht" && !recipient.submittedAt,
+  );
+}
+
+function isContractExpiring(contract: Contract) {
+  if (contract.status === "Läuft aus" || contract.status === "In Prüfung") {
+    return true;
+  }
+
+  const endDate = new Date(contract.endDate).getTime();
+  if (Number.isNaN(endDate)) {
+    return false;
+  }
+
+  const now = Date.now();
+  const ninetyDaysFromNow = now + 90 * 24 * 60 * 60 * 1000;
+  return endDate > now && endDate <= ninetyDaysFromNow;
+}
+
+function ObjectDossierOverview({
+  object,
+  apartments,
+  tenancies,
+  meters,
+  utilities,
+  documents,
+  tenants,
+  contracts,
+  rentUnits,
+  readingCampaigns,
+  missingRequirements,
+  creatingRequirementKey,
+  requirementActionError,
+  onCreateMissingRequirement,
+  onOpenSection,
+}: {
+  object: ImmoObject;
+  apartments: LocalApartment[];
+  tenancies: LocalTenancy[];
+  meters: LocalMeter[];
+  utilities: LocalUtility[];
+  documents: ImmoDocument[];
+  tenants: Tenant[];
+  contracts: Contract[];
+  rentUnits: RentUnit[];
+  readingCampaigns: ReadingCampaign[];
+  missingRequirements: DocumentRequirement[];
+  creatingRequirementKey: string | null;
+  requirementActionError: string | null;
+  onCreateMissingRequirement: (requirement: DocumentRequirement) => void;
+  onOpenSection: (section: SectionKey) => void;
+}) {
+  const activeTenants = tenants.filter((tenant) => tenant.status === "Aktiv").length;
+  const pendingTenants = tenants.filter((tenant) => tenant.status === "Ausstehend").length;
+  const activeContracts = contracts.filter((contract) => contract.status === "Aktiv").length;
+  const expiringContracts = contracts.filter(isContractExpiring).length;
+  const openDocuments = documents.filter(isOpenDocumentCase).length;
+  const missingFiles = documents.filter((document) => document.fileAvailable === false).length;
+  const openCampaigns = readingCampaigns.filter(isOpenReadingCampaign).length;
+  const submittedReadings = readingCampaigns.reduce(
+    (sum, campaign) =>
+      sum + campaign.recipients.filter((recipient) => recipient.status === "eingereicht").length,
+    0,
+  );
+  const readingRecipients = readingCampaigns.reduce(
+    (sum, campaign) => sum + campaign.recipients.length,
+    0,
+  );
+  const persistedUnitCount = Math.max(apartments.length, rentUnits.length, object.units);
+  const openHints = [
+    ...(pendingTenants > 0 ? [`${pendingTenants} Mieter ausstehend`] : []),
+    ...(expiringContracts > 0 ? [`${expiringContracts} Vertrag/Verträge bald kritisch`] : []),
+    ...(missingRequirements.length > 0 ? [`${missingRequirements.length} fehlende Pflichtdokumente`] : []),
+    ...(openDocuments > 0 ? [`${openDocuments} offene Dokumentfälle`] : []),
+    ...(missingFiles > 0 ? [`${missingFiles} Datei(en) fehlen in der Ablage`] : []),
+    ...(openCampaigns > 0 ? [`${openCampaigns} offene Ablesekampagnen`] : []),
+  ];
+
+  return (
+    <div className="space-y-5 rounded-2xl border border-zinc-200 bg-zinc-50 p-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-zinc-900">Objektakte</h3>
+          <p className="mt-1 text-sm text-zinc-500">
+            Zentrale Sicht auf Einheiten, Mieter, Verträge, Dokumente und laufende Vorgänge.
+          </p>
+        </div>
+        <Link
+          href={buildObjectDocumentsHref(object.id)}
+          className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition hover:border-zinc-300 hover:bg-zinc-50"
+        >
+          Dokumentenakte öffnen
+        </Link>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <DetailField label="Einheiten" value={persistedUnitCount} />
+        <DetailField label="Mieter" value={`${tenants.length} gesamt · ${activeTenants} aktiv`} />
+        <DetailField label="Verträge" value={`${contracts.length} gesamt · ${activeContracts} aktiv`} />
+        <DetailField label="Dokumente" value={`${documents.length} gesamt · ${openDocuments} offen`} />
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <DetailField label="Lokale Wohnungsstruktur" value={apartments.length} />
+        <DetailField label="Mietverhältnisse" value={tenancies.length} />
+        <DetailField label="Zähler" value={meters.length} />
+        <DetailField label="Nebenkostenpositionen" value={utilities.length} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="rounded-xl border border-zinc-200 bg-white p-4">
+          <p className="text-sm font-semibold text-zinc-900">Offene Punkte</p>
+          <div className="mt-3 space-y-2">
+            {openHints.length === 0 ? (
+              <p className="text-sm text-emerald-700">Keine offenen Punkte aus den aktuellen Daten.</p>
+            ) : (
+              openHints.map((hint) => (
+                <p key={hint} className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  {hint}
+                </p>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-white p-4">
+          <p className="text-sm font-semibold text-zinc-900">Ablesungen</p>
+          <p className="mt-3 text-sm text-zinc-600">
+            {readingCampaigns.length} Kampagnen · {submittedReadings} von {readingRecipients} Rückmeldungen eingereicht
+          </p>
+          <p className="mt-2 text-sm text-zinc-500">
+            Offene Kampagnen erscheinen zusätzlich im Dashboard und in den Hinweisen dieser Objektakte.
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-zinc-200 bg-white p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-zinc-900">Pflichtdokumente</p>
+            <p className="mt-1 text-sm text-zinc-500">
+              Sollbestand aus Objekt, belegten Einheiten und dem letzten Abrechnungsjahr.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onOpenSection("documents")}
+            className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50"
+          >
+            Dokumente prüfen
+          </button>
+        </div>
+
+        {missingRequirements.length === 0 ? (
+          <p className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            Alle aktuell erwarteten Pflichtdokumente sind vorhanden.
+          </p>
+        ) : (
+          <>
+            {requirementActionError ? (
+              <p className="mt-3 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {requirementActionError}
+              </p>
+            ) : null}
+            <div className="mt-3 grid gap-2 xl:grid-cols-2">
+              {missingRequirements.slice(0, 6).map((requirement) => (
+                <div
+                  key={requirement.key}
+                  className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <Link
+                      href={buildObjectDocumentsHref(object.id, {
+                        rentUnitId: requirement.rentUnitId ?? undefined,
+                        category: requirement.category,
+                        reportYear: requirement.reportYear,
+                      })}
+                      className="min-w-0 transition hover:text-amber-950"
+                    >
+                      <p className="text-sm font-medium text-amber-900">{requirement.title}</p>
+                      <p className="mt-1 text-xs text-amber-700">{requirement.reason}</p>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => onCreateMissingRequirement(requirement)}
+                      disabled={creatingRequirementKey === requirement.key}
+                      className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg bg-amber-900 px-3 text-xs font-medium text-white transition hover:bg-amber-800 disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {creatingRequirementKey === requirement.key ? "Wird angelegt..." : "Als fehlend anlegen"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {missingRequirements.length > 6 ? (
+                <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
+                  + {missingRequirements.length - 6} weitere Pflichtdokumente
+                </p>
+              ) : null}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        {Object.entries(SECTION_LABELS).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onOpenSection(key as SectionKey)}
+            className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function buildObjectDocumentsHref(
@@ -5337,8 +5571,18 @@ function normalizeObjectDetailState(
   };
 }
 
-export function ObjectDetail({ object, documents }: ObjectDetailProps) {
+export function ObjectDetail({
+  object,
+  documents,
+  tenants = [],
+  contracts = [],
+  rentUnits = [],
+  readingCampaigns = [],
+}: ObjectDetailProps) {
   const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
+  const [createdMissingDocuments, setCreatedMissingDocuments] = useState<ImmoDocument[]>([]);
+  const [creatingRequirementKey, setCreatingRequirementKey] = useState<string | null>(null);
+  const [requirementActionError, setRequirementActionError] = useState<string | null>(null);
   const [hasLoadedStorage, setHasLoadedStorage] = useState(false);
   const [apartmentsByObject, setApartmentsByObject] = useState<
     Record<string, LocalApartment[]>
@@ -5355,6 +5599,9 @@ export function ObjectDetail({ object, documents }: ObjectDetailProps) {
 
   useEffect(() => {
     setActiveSection(null);
+    setCreatedMissingDocuments([]);
+    setCreatingRequirementKey(null);
+    setRequirementActionError(null);
   }, [object?.id]);
 
   useEffect(() => {
@@ -5376,9 +5623,54 @@ export function ObjectDetail({ object, documents }: ObjectDetailProps) {
   const rawTenancies = objectKey ? tenanciesByObject[objectKey] ?? [] : [];
   const rawMeters = objectKey ? metersByObject[objectKey] ?? [] : [];
   const rawUtilities = objectKey ? utilitiesByObject[objectKey] ?? [] : [];
+  const allDocuments = [...documents, ...createdMissingDocuments];
   const objectDocuments = objectKey
-    ? documents.filter((document) => document.objectId === objectKey)
+    ? allDocuments.filter((document) => document.objectId === objectKey)
     : [];
+  const objectTenants = objectKey
+    ? tenants.filter((tenant) => tenant.objectId === objectKey)
+    : [];
+  const objectContracts = objectKey
+    ? contracts.filter((contract) => contract.objectId === objectKey)
+    : [];
+  const objectRentUnits = objectKey
+    ? rentUnits.filter((rentUnit) => rentUnit.objectId === objectKey)
+    : [];
+  const objectReadingCampaigns = objectKey
+    ? readingCampaigns.filter((campaign) => campaign.objectId === objectKey)
+    : [];
+  const documentRequirements = object
+    ? buildDocumentRequirements({
+        object,
+        documents: objectDocuments,
+        tenants: objectTenants,
+        contracts: objectContracts,
+        rentUnits: objectRentUnits,
+      })
+    : [];
+  const missingDocumentRequirements = getMissingDocumentRequirements(documentRequirements);
+
+  async function handleCreateMissingRequirement(requirement: DocumentRequirement) {
+    setCreatingRequirementKey(requirement.key);
+    setRequirementActionError(null);
+
+    const result = await createMissingDocument({
+      objectId: requirement.objectId,
+      rentUnitId: requirement.rentUnitId ?? undefined,
+      reportYear: requirement.reportYear ? String(requirement.reportYear) : undefined,
+      category: requirement.category,
+      title: requirement.title,
+      uploadedBy: "Pflichtlogik",
+    });
+
+    if (result.ok) {
+      setCreatedMissingDocuments((current) => [result.document, ...current]);
+    } else {
+      setRequirementActionError(result.error);
+    }
+
+    setCreatingRequirementKey(null);
+  }
 
   useEffect(() => {
     if (!hasLoadedStorage || objectKey === "") {
@@ -5971,45 +6263,65 @@ export function ObjectDetail({ object, documents }: ObjectDetailProps) {
       </div>
 
       {activeSection === null ? (
-        <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-5">
-          <div className="mb-5">
-            <h3 className="text-lg font-semibold text-zinc-900">Arbeitsbereich wählen</h3>
-            <p className="mt-1 text-sm text-zinc-500">
-              Wähle den Bereich, in dem du im Objekt weiterarbeiten willst.
-            </p>
-          </div>
+        <div className="space-y-5">
+          <ObjectDossierOverview
+            object={object}
+            apartments={apartments}
+            tenancies={tenancies}
+            meters={meters}
+            utilities={utilities}
+            documents={objectDocuments}
+            tenants={objectTenants}
+            contracts={objectContracts}
+            rentUnits={objectRentUnits}
+            readingCampaigns={objectReadingCampaigns}
+            missingRequirements={missingDocumentRequirements}
+            creatingRequirementKey={creatingRequirementKey}
+            requirementActionError={requirementActionError}
+            onCreateMissingRequirement={handleCreateMissingRequirement}
+            onOpenSection={setActiveSection}
+          />
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <SectionCard
-              title="Übersicht"
-              text="Stammdaten, Status, Kennzahlen und Objektkopf ansehen."
-              onClick={() => setActiveSection("overview")}
-            />
-            <SectionCard
-              title="Wohnungen"
-              text="Wohnungsstruktur des Objekts aufbauen und später je Wohnung weiterarbeiten."
-              onClick={() => setActiveSection("apartments")}
-            />
-            <SectionCard
-              title="Mietverhältnisse"
-              text="Mietverhältnisse im Objektkontext führen und prüfen."
-              onClick={() => setActiveSection("tenancies")}
-            />
-            <SectionCard
-              title="Zähler"
-              text="Zähler, Zählerstände und spätere Verbrauchslogik vorbereiten."
-              onClick={() => setActiveSection("meters")}
-            />
-            <SectionCard
-              title="Nebenkosten"
-              text="Nebenkosten, Verteilungen und spätere Abrechnungen im Objekt bearbeiten."
-              onClick={() => setActiveSection("utilities")}
-            />
-            <SectionCard
-              title="Dokumente"
-              text="Objektbezogene Unterlagen an einem Ort bündeln."
-              onClick={() => setActiveSection("documents")}
-            />
+          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-5">
+            <div className="mb-5">
+              <h3 className="text-lg font-semibold text-zinc-900">Arbeitsbereich wählen</h3>
+              <p className="mt-1 text-sm text-zinc-500">
+                Wähle den Bereich, in dem du im Objekt weiterarbeiten willst.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <SectionCard
+                title="Übersicht"
+                text="Stammdaten, Status, Kennzahlen und Objektkopf ansehen."
+                onClick={() => setActiveSection("overview")}
+              />
+              <SectionCard
+                title="Wohnungen"
+                text="Wohnungsstruktur des Objekts aufbauen und später je Wohnung weiterarbeiten."
+                onClick={() => setActiveSection("apartments")}
+              />
+              <SectionCard
+                title="Mietverhältnisse"
+                text="Mietverhältnisse im Objektkontext führen und prüfen."
+                onClick={() => setActiveSection("tenancies")}
+              />
+              <SectionCard
+                title="Zähler"
+                text="Zähler, Zählerstände und spätere Verbrauchslogik vorbereiten."
+                onClick={() => setActiveSection("meters")}
+              />
+              <SectionCard
+                title="Nebenkosten"
+                text="Nebenkosten, Verteilungen und spätere Abrechnungen im Objekt bearbeiten."
+                onClick={() => setActiveSection("utilities")}
+              />
+              <SectionCard
+                title="Dokumente"
+                text="Objektbezogene Unterlagen an einem Ort bündeln."
+                onClick={() => setActiveSection("documents")}
+              />
+            </div>
           </div>
         </div>
       ) : (
@@ -6027,7 +6339,7 @@ export function ObjectDetail({ object, documents }: ObjectDetailProps) {
             <ApartmentsSection
               object={object}
               apartments={apartments}
-              documents={documents}
+              documents={allDocuments}
               onCreateApartment={handleCreateApartment}
               onUpdateApartment={handleUpdateApartment}
               onDeleteApartment={handleDeleteApartment}
@@ -6039,7 +6351,7 @@ export function ObjectDetail({ object, documents }: ObjectDetailProps) {
               object={object}
               apartments={apartments}
               tenancies={tenancies}
-              documents={documents}
+              documents={allDocuments}
               onCreateTenancy={handleCreateTenancy}
               onUpdateTenancy={handleUpdateTenancy}
               onDeleteTenancy={handleDeleteTenancy}
@@ -6067,7 +6379,7 @@ export function ObjectDetail({ object, documents }: ObjectDetailProps) {
               apartments={apartments}
               meters={meters}
               utilities={utilities}
-              documents={documents}
+              documents={allDocuments}
               onCreateUtility={handleCreateUtility}
               onUpdateUtility={handleUpdateUtility}
               onDeleteUtility={handleDeleteUtility}

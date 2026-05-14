@@ -1,9 +1,20 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectDetail } from "./object-detail";
 import { OBJECT_MODULE_STORAGE_KEYS } from "@/features/finances/utils/nebenkosten-storage";
 import type { ImmoDocument } from "@/types/document";
+import type { ReadingCampaign } from "@/types/meter-reading";
 import type { ImmoObject } from "@/types/object";
+import type { Tenant } from "@/types/tenant";
+import type { Contract } from "@/types/contract";
+
+const { createMissingDocumentMock } = vi.hoisted(() => ({
+  createMissingDocumentMock: vi.fn(),
+}));
+
+vi.mock("@/features/documents/services/documents.service", () => ({
+  createMissingDocument: createMissingDocumentMock,
+}));
 
 const object: ImmoObject = {
   id: "obj-1",
@@ -87,9 +98,156 @@ const documents: ImmoDocument[] = [
   },
 ];
 
+const tenants: Tenant[] = [
+  {
+    id: "tenant-1",
+    objectId: "obj-1",
+    rentUnitId: "ru-1",
+    fullName: "Max Muster",
+    objectName: "Sonnenhof",
+    objectDisplayId: "WEG-001",
+    unit: "WE 01",
+    email: "max@example.test",
+    phone: "",
+    status: "Aktiv",
+  },
+  {
+    id: "tenant-2",
+    objectId: "obj-1",
+    rentUnitId: "ru-2",
+    fullName: "Erika Beispiel",
+    objectName: "Sonnenhof",
+    objectDisplayId: "WEG-001",
+    unit: "WE 02",
+    email: "erika@example.test",
+    phone: "",
+    status: "Ausstehend",
+  },
+];
+
+const contracts: Contract[] = [
+  {
+    id: "contract-1",
+    objectId: "obj-1",
+    tenantId: "tenant-1",
+    rentUnitId: "ru-1",
+    title: "Mietvertrag WE 01",
+    objectName: "Sonnenhof",
+    objectDisplayId: "WEG-001",
+    tenantName: "Max Muster",
+    unit: "WE 01",
+    startDate: "2025-01-01",
+    endDate: "2026-06-30",
+    status: "In Prüfung",
+  },
+];
+
+const readingCampaigns: ReadingCampaign[] = [
+  {
+    id: "campaign-1",
+    objectId: "obj-1",
+    reportYear: 2026,
+    status: "offen",
+    createdAt: "2026-04-01T09:00:00.000Z",
+    expiresAt: null,
+    object: {
+      id: "obj-1",
+      displayId: "WEG-001",
+      name: "Sonnenhof",
+    },
+    recipients: [
+      {
+        id: "access-1",
+        tenantId: "tenant-1",
+        tenantName: "Max Muster",
+        tenantEmail: "max@example.test",
+        rentUnitId: "ru-1",
+        unitLabel: "WE 01",
+        token: "token",
+        status: "offen",
+        sentAt: "2026-04-01T09:00:00.000Z",
+        submittedAt: null,
+        expiresAt: null,
+      },
+    ],
+  },
+];
+
 describe("ObjectDetail", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    createMissingDocumentMock.mockReset();
+  });
+
+  it("shows the object dossier with real linked module counts", () => {
+    render(
+      <ObjectDetail
+        object={object}
+        documents={documents}
+        tenants={tenants}
+        contracts={contracts}
+        readingCampaigns={readingCampaigns}
+      />,
+    );
+
+    expect(screen.getByText("Objektakte")).toBeInTheDocument();
+    expect(screen.getByText("2 gesamt · 1 aktiv")).toBeInTheDocument();
+    expect(screen.getByText("1 gesamt · 0 aktiv")).toBeInTheDocument();
+    expect(screen.getByText("2 gesamt · 1 offen")).toBeInTheDocument();
+    expect(screen.getByText("1 Mieter ausstehend")).toBeInTheDocument();
+    expect(screen.getByText("1 Vertrag/Verträge bald kritisch")).toBeInTheDocument();
+    expect(screen.getByText("6 fehlende Pflichtdokumente")).toBeInTheDocument();
+    expect(screen.getByText("Pflichtdokumente")).toBeInTheDocument();
+    expect(screen.getByText("Jahresreport WEG 2025")).toBeInTheDocument();
+    expect(screen.getByText("Mietvertrag WE 01")).toBeInTheDocument();
+    expect(screen.getByText("1 offene Ablesekampagnen")).toBeInTheDocument();
+    expect(screen.getByText("Dokumentenakte öffnen")).toHaveAttribute(
+      "href",
+      "/dokumente?objectId=obj-1",
+    );
+  });
+
+  it("creates a missing document placeholder from a required document gap", async () => {
+    createMissingDocumentMock.mockResolvedValueOnce({
+      ok: true,
+      document: {
+        ...documents[1],
+        id: "doc-required-created",
+        title: "Jahresreport WEG 2025",
+        fileName: "fehlend_Jahresreport_WEG_2025.missing",
+        reportYear: 2025,
+        status: "Fehlt",
+        fileAvailable: false,
+        openIssues: ["Dokument ist fachlich als fehlend markiert"],
+        actionState: "file_missing",
+      },
+    });
+
+    render(
+      <ObjectDetail
+        object={object}
+        documents={documents}
+        tenants={tenants}
+        contracts={contracts}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Als fehlend anlegen" })[0]);
+
+    await waitFor(() => {
+      expect(createMissingDocumentMock).toHaveBeenCalledWith({
+        objectId: "obj-1",
+        rentUnitId: undefined,
+        reportYear: "2025",
+        category: "Jahresreport WEG",
+        title: "Jahresreport WEG 2025",
+        uploadedBy: "Pflichtlogik",
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("5 fehlende Pflichtdokumente")).toBeInTheDocument();
+    });
   });
 
   it("shows the object document cockpit with filtered object documents", () => {

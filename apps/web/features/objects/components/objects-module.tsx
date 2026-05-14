@@ -5,23 +5,38 @@ import { StatCard } from "@/components/ui/stat-card";
 import { ObjectList } from "@/features/objects/components/object-list";
 import { ObjectDetail } from "@/features/objects/components/object-detail";
 import { NewObjectForm } from "@/features/objects/components/new-object-form";
+import type { RentUnit } from "@/features/finances/services/rent-units.service";
+import type { Contract } from "@/types/contract";
 import type { ImmoDocument } from "@/types/document";
+import type { ReadingCampaign } from "@/types/meter-reading";
 import {
   createObject,
   type CreateObjectInput,
 } from "@/features/objects/services/objects.service";
 import type { ImmoObject } from "@/types/object";
+import type { Tenant } from "@/types/tenant";
 
 type ObjectsModuleProps = {
   initialObjects: ImmoObject[];
   documents: ImmoDocument[];
+  tenants?: Tenant[];
+  contracts?: Contract[];
+  rentUnits?: RentUnit[];
+  readingCampaigns?: ReadingCampaign[];
 };
 
 function sortObjectsByDisplayId(objects: ImmoObject[]): ImmoObject[] {
   return [...objects].sort((a, b) => a.displayId.localeCompare(b.displayId));
 }
 
-export function ObjectsModule({ initialObjects, documents }: ObjectsModuleProps) {
+export function ObjectsModule({
+  initialObjects,
+  documents,
+  tenants = [],
+  contracts = [],
+  rentUnits = [],
+  readingCampaigns = [],
+}: ObjectsModuleProps) {
   const [objects, setObjects] = useState<ImmoObject[]>(
     sortObjectsByDisplayId(initialObjects)
   );
@@ -125,7 +140,14 @@ export function ObjectsModule({ initialObjects, documents }: ObjectsModuleProps)
             </p>
           </div>
 
-          <ObjectDetail object={selectedObject} documents={documents} />
+          <ObjectDetail
+            object={selectedObject}
+            documents={documents}
+            tenants={tenants}
+            contracts={contracts}
+            rentUnits={rentUnits}
+            readingCampaigns={readingCampaigns}
+          />
         </div>
       ) : (
         <>
