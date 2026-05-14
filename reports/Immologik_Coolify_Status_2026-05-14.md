@@ -26,6 +26,8 @@
 - `DOCUMENTS_PUBLIC_API_BASE_URL=http://178.104.65.232:8081/api/v1`
 - `CORS_ALLOWED_ORIGINS=http://178.104.65.232:8081`
 - `POSTGRES_PASSWORD`: gesetzt, nicht dokumentiert.
+- `DATABASE_URL`: optional explizit setzen, wenn `POSTGRES_PASSWORD` URL-Sonderzeichen enthaelt.
+  - Beispiel: ein Slash `/` im Passwort muss in der URL als `%2F` geschrieben werden.
 - `MINIO_ROOT_PASSWORD`: gesetzt, nicht dokumentiert.
 - `BASIC_AUTH_HASH`: gesetzt, nicht dokumentiert.
 
@@ -55,6 +57,7 @@
 - Web-Build nach Pflichtluecken-Platzhalter-Aktion: `pnpm --dir apps/web run build` erfolgreich.
 - Web-Tests nach Mieterakten-Erweiterung: `pnpm --dir apps/web run test` erfolgreich, 96 Tests bestanden.
 - Web-Build nach Mieterakten-Erweiterung: `pnpm --dir apps/web run build` erfolgreich.
+- Coolify-Compose erlaubt jetzt eine explizite `DATABASE_URL`, damit Postgres-Passwoerter mit URL-Sonderzeichen Prisma nicht mehr crashen lassen.
 
 ## Inhaltlicher App-Zustand
 
