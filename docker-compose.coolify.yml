@@ -83,7 +83,9 @@ services:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
 
   gateway:
-    image: caddy:2-alpine
+    build:
+      context: .
+      dockerfile: deploy/Caddyfile.Dockerfile
     restart: unless-stopped
     depends_on:
       - web
@@ -92,7 +94,6 @@ services:
       BASIC_AUTH_USER: ${BASIC_AUTH_USER}
       BASIC_AUTH_HASH: ${BASIC_AUTH_HASH}
     volumes:
-      - ./deploy/Caddyfile.immologik:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     ports:
