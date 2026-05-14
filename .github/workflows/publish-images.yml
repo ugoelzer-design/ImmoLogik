@@ -1,0 +1,86 @@
+name: Publish ImmoLogik Images
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_TAG: master
+  WEB_BUILD_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL || 'http://178.104.65.232:8081/api/v1' }}
+
+jobs:
+  publish:
+    name: Build and push Docker images
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            image: ghcr.io/ugoelzer-design/immologik-api
+            dockerfile: apps/api/Dockerfile
+            context: .
+          - name: web
+            image: ghcr.io/ugoelzer-design/immologik-web
+            dockerfile: apps/web/Dockerfile
+            context: .
+          - name: gateway
+            image: ghcr.io/ugoelzer-design/immologik-gateway
+            dockerfile: deploy/Caddyfile.Dockerfile
+            context: .
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push API image
+        if: matrix.name == 'api'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ matrix.image }}:${{ env.IMAGE_TAG }}
+            ${{ matrix.image }}:${{ github.sha }}
+
+      - name: Build and push web image
+        if: matrix.name == 'web'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=${{ env.WEB_BUILD_API_BASE_URL }}
+          tags: |
+            ${{ matrix.image }}:${{ env.IMAGE_TAG }}
+            ${{ matrix.image }}:${{ github.sha }}
+
+      - name: Build and push gateway image
+        if: matrix.name == 'gateway'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ matrix.image }}:${{ env.IMAGE_TAG }}
+            ${{ matrix.image }}:${{ github.sha }}

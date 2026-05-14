@@ -4,12 +4,13 @@
 
 - GitHub Repository: `ugoelzer-design/ImmoLogik`
 - Branch: `master`
-- Deployter Commit: `8596602`
+- Deployter Commit: zuletzt manuell stabilisiert nach Server-Neustart; aktueller GitHub-Stand wird weitergefuehrt.
 - Coolify Projekt: `ImmoLogik`
 - Coolify Resource: ImmoLogik Docker Compose Deployment
 - Build Pack: `Docker Compose`
 - Base Directory: `/`
-- Docker Compose Location: `/docker-compose.coolify.yml`
+- Docker Compose Location aktuell: `/docker-compose.coolify.yml`
+- Vorbereitete Ziel-Compose ohne Server-Builds: `/docker-compose.coolify.images.yml`
 
 ## Erreichbarkeit
 
@@ -58,6 +59,25 @@
 - Web-Tests nach Mieterakten-Erweiterung: `pnpm --dir apps/web run test` erfolgreich, 96 Tests bestanden.
 - Web-Build nach Mieterakten-Erweiterung: `pnpm --dir apps/web run build` erfolgreich.
 - Coolify-Compose erlaubt jetzt eine explizite `DATABASE_URL`, damit Postgres-Passwoerter mit URL-Sonderzeichen Prisma nicht mehr crashen lassen.
+- Nach einem Build-bedingten Lastproblem wurde der Server neu gestartet und die ImmoLogik-Container wurden wieder gestartet; App lief danach wieder ueber `http://178.104.65.232:8081`.
+- Neue Zielarchitektur vorbereitet: GitHub Actions baut API-, Web- und Gateway-Images und pusht sie nach GHCR; Coolify soll spaeter nur noch Images pullen.
+
+## Vorbereitete Build-Entlastung
+
+- Neue GitHub Actions Workflow-Datei: `.github/workflows/publish-images.yml`
+  - baut `ghcr.io/ugoelzer-design/immologik-api:master`
+  - baut `ghcr.io/ugoelzer-design/immologik-web:master`
+  - baut `ghcr.io/ugoelzer-design/immologik-gateway:master`
+  - tagged zusaetzlich mit dem Commit-SHA.
+- Neue Coolify-Compose-Datei ohne lokale Build-Schritte: `docker-compose.coolify.images.yml`
+  - verwendet fertige GHCR-Images fuer `api`, `web` und `gateway`.
+  - behaelt Postgres-, MinIO- und Volume-Namen unveraendert, damit Daten erhalten bleiben.
+  - verwendet `IMAGE_TAG=master` als Standard.
+- Wichtig vor Umstellung in Coolify:
+  - erst pruefen, ob die GitHub Action erfolgreich Images in GHCR veroeffentlicht hat.
+  - wenn GHCR-Pakete privat sind, braucht Coolify Registry-Zugang oder die Pakete muessen oeffentlich lesbar sein.
+  - dann in Coolify die Docker Compose Location von `/docker-compose.coolify.yml` auf `/docker-compose.coolify.images.yml` umstellen.
+  - danach soll kein lokaler Docker-Build mehr auf dem kleinen Server laufen.
 
 ## Inhaltlicher App-Zustand
 
