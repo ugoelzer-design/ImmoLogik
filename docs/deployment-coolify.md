@@ -118,6 +118,8 @@ Die Compose-Datei nutzt benannte Volumes:
 
 Diese Volumes muessen in Coolify/Server-Backups beruecksichtigt werden.
 
+Fuer automatische OneDrive- oder Google-Drive-Backups siehe `docs/backup-cloud.md`.
+
 ## Nach Deploy pruefen
 
 1. API erreichbar: `/api/v1`

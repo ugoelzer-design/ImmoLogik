@@ -35,6 +35,10 @@ jobs:
             image: ghcr.io/ugoelzer-design/immologik-gateway
             dockerfile: deploy/Caddyfile.Dockerfile
             context: .
+          - name: backup
+            image: ghcr.io/ugoelzer-design/immologik-backup
+            dockerfile: deploy/backup/Dockerfile
+            context: .
 
     steps:
       - name: Checkout
@@ -76,6 +80,17 @@ jobs:
 
       - name: Build and push gateway image
         if: matrix.name == 'gateway'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ matrix.image }}:${{ env.IMAGE_TAG }}
+            ${{ matrix.image }}:${{ github.sha }}
+
+      - name: Build and push backup image
+        if: matrix.name == 'backup'
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
