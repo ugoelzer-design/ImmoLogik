@@ -61,15 +61,22 @@ async function bootstrap() {
   });
 
   // ─── Swagger / OpenAPI ────────────────────────────────────────────────────────
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle(SWAGGER_CONFIG.title)
-    .setDescription(SWAGGER_CONFIG.description)
-    .setVersion(SWAGGER_CONFIG.version);
-  SWAGGER_CONFIG.tags.forEach(([name, description]) => {
-    swaggerConfig.addTag(name, description);
-  });
-  const document = SwaggerModule.createDocument(app, swaggerConfig.build());
-  SwaggerModule.setup(API_DOCS_PATH, app, document);
+  const docsEnabled =
+    nodeEnv !== 'production' || process.env.API_DOCS_ENABLED === 'true';
+
+  if (docsEnabled) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle(SWAGGER_CONFIG.title)
+      .setDescription(SWAGGER_CONFIG.description)
+      .setVersion(SWAGGER_CONFIG.version);
+    SWAGGER_CONFIG.tags.forEach(([name, description]) => {
+      swaggerConfig.addTag(name, description);
+    });
+    const document = SwaggerModule.createDocument(app, swaggerConfig.build());
+    SwaggerModule.setup(API_DOCS_PATH, app, document);
+  } else {
+    logger.log('Swagger/OpenAPI ist in Produktion deaktiviert.');
+  }
   // ─────────────────────────────────────────────────────────────────────────────
 
   await app.listen(process.env.API_PORT ?? API_DEFAULT_PORT);

@@ -27,7 +27,7 @@ Der Server reicht fuer den ersten ImmoLogik/Coolify-Betrieb aus. Wichtig ist, Bu
 
 ## Wichtiger Sicherheitshinweis
 
-`AUTH_MODE=dev` lässt die App ohne echte Benutzerprüfung laufen. Solange Entra-JWT-Validierung nicht implementiert ist, darf der Dienst nicht frei öffentlich betrieben werden.
+`AUTH_MODE=dev` lässt die App ohne echte Benutzerprüfung laufen und darf nur lokal verwendet werden. Die Coolify-Compose-Dateien starten die API standardmäßig mit `NODE_ENV=production` und `AUTH_MODE=entra`; ohne Entra-Konfiguration bricht der Start bewusst ab.
 
 Für den ersten Hetzner/Coolify-Start ist Basic Auth am Gateway vorgesehen:
 

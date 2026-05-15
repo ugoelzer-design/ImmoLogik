@@ -6,8 +6,31 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { createPublicKey, createVerify, type JsonWebKey } from 'crypto';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from './public.decorator';
+
+type JwtHeader = {
+  alg?: string;
+  kid?: string;
+};
+
+type JwtPayload = {
+  aud?: string | string[];
+  exp?: number;
+  iss?: string;
+  nbf?: number;
+};
+
+type JwksKey = JsonWebKey & {
+  kid?: string;
+};
+
+type JwksResponse = {
+  keys?: JwksKey[];
+};
+
+const ENTRA_JWKS_CACHE_TTL_MS = 60 * 60 * 1000;
 
 /**
  * Globaler Auth-Guard für Immologik.
@@ -22,10 +45,11 @@ import { IS_PUBLIC_KEY } from './public.decorator';
 @Injectable()
 export class AuthGuard implements CanActivate {
   private readonly logger = new Logger(AuthGuard.name);
+  private jwksCache: { expiresAt: number; keys: JwksKey[] } | null = null;
 
   constructor(private readonly reflector: Reflector) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -51,19 +75,8 @@ export class AuthGuard implements CanActivate {
         );
       }
 
-      // TODO: Entra ID JWT-Validierung implementieren.
-      // Das Bearer-Token muss gegen die Microsoft Identity Platform validiert werden.
-      // Empfohlene Bibliothek: @azure/msal-node oder jwks-rsa + jsonwebtoken.
-      // Solange die Validierung nicht implementiert ist, werden alle Anfragen im
-      // entra-Modus abgelehnt, um unbeabsichtigten Produktionseinsatz zu verhindern.
-      this.logger.error(
-        'Entra-Authentifizierung ist konfiguriert (AUTH_MODE=entra), ' +
-          'aber die JWT-Validierung ist noch nicht implementiert. ' +
-          'Zugriff verweigert. Bitte auth.guard.ts um MSAL-Token-Validierung ergänzen.',
-      );
-      throw new UnauthorizedException(
-        'Authentifizierung noch nicht vollständig konfiguriert. Bitte Administrator kontaktieren.',
-      );
+      await this.validateEntraToken(authHeader.slice('Bearer '.length));
+      return true;
     }
 
     this.logger.error(
@@ -72,5 +85,153 @@ export class AuthGuard implements CanActivate {
     throw new UnauthorizedException(
       `Unbekannter Authentifizierungsmodus: ${authMode}`,
     );
+  }
+
+  private async validateEntraToken(token: string) {
+    const tenantId = this.readRequiredEnv('ENTRA_TENANT_ID');
+    const clientId = this.readRequiredEnv('ENTRA_CLIENT_ID');
+    const expectedAudiences = this.readExpectedAudiences(clientId);
+    const [encodedHeader, encodedPayload, encodedSignature] = token.split('.');
+
+    if (!encodedHeader || !encodedPayload || !encodedSignature) {
+      throw new UnauthorizedException('Bearer-Token ist ungültig.');
+    }
+
+    const header = this.decodeJwtPart<JwtHeader>(encodedHeader);
+    const payload = this.decodeJwtPart<JwtPayload>(encodedPayload);
+
+    if (header.alg !== 'RS256' || !header.kid) {
+      throw new UnauthorizedException(
+        'Bearer-Token verwendet keinen gültigen Signaturalgorithmus.',
+      );
+    }
+
+    this.validateTokenClaims(payload, tenantId, expectedAudiences);
+
+    const jwk = await this.getSigningKey(header.kid, tenantId);
+    const publicKey = createPublicKey({ key: jwk, format: 'jwk' });
+    const verifier = createVerify('RSA-SHA256');
+    verifier.update(`${encodedHeader}.${encodedPayload}`);
+    verifier.end();
+
+    const signature = this.base64UrlToBuffer(encodedSignature);
+    if (!verifier.verify(publicKey, signature)) {
+      throw new UnauthorizedException('Bearer-Token-Signatur ist ungültig.');
+    }
+  }
+
+  private validateTokenClaims(
+    payload: JwtPayload,
+    tenantId: string,
+    expectedAudiences: string[],
+  ) {
+    const nowInSeconds = Math.floor(Date.now() / 1000);
+    const expectedIssuers = [
+      `https://login.microsoftonline.com/${tenantId}/v2.0`,
+      `https://sts.windows.net/${tenantId}/`,
+    ];
+    const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+
+    if (!payload.iss || !expectedIssuers.includes(payload.iss)) {
+      throw new UnauthorizedException(
+        'Bearer-Token stammt nicht vom erwarteten Entra-Mandanten.',
+      );
+    }
+
+    if (
+      !audiences.some(
+        (audience) => audience && expectedAudiences.includes(audience),
+      )
+    ) {
+      throw new UnauthorizedException(
+        'Bearer-Token ist nicht für diese API ausgestellt.',
+      );
+    }
+
+    if (!payload.exp || payload.exp <= nowInSeconds) {
+      throw new UnauthorizedException('Bearer-Token ist abgelaufen.');
+    }
+
+    if (payload.nbf && payload.nbf > nowInSeconds) {
+      throw new UnauthorizedException('Bearer-Token ist noch nicht gültig.');
+    }
+  }
+
+  private async getSigningKey(kid: string, tenantId: string) {
+    const keys = await this.getJwksKeys(tenantId);
+    const key = keys.find((item) => item.kid === kid);
+
+    if (!key) {
+      throw new UnauthorizedException(
+        'Passender Entra-Signaturschlüssel wurde nicht gefunden.',
+      );
+    }
+
+    return key;
+  }
+
+  private async getJwksKeys(tenantId: string) {
+    const now = Date.now();
+    if (this.jwksCache && this.jwksCache.expiresAt > now) {
+      return this.jwksCache.keys;
+    }
+
+    const response = await fetch(
+      `https://login.microsoftonline.com/${tenantId}/discovery/v2.0/keys`,
+    );
+
+    if (!response.ok) {
+      this.logger.error(
+        `Entra JWKS konnte nicht geladen werden: HTTP ${response.status}`,
+      );
+      throw new UnauthorizedException(
+        'Entra-Signaturschlüssel konnten nicht geladen werden.',
+      );
+    }
+
+    const body = (await response.json()) as JwksResponse;
+    const keys = Array.isArray(body.keys) ? body.keys : [];
+
+    this.jwksCache = {
+      expiresAt: now + ENTRA_JWKS_CACHE_TTL_MS,
+      keys,
+    };
+
+    return keys;
+  }
+
+  private decodeJwtPart<T>(value: string): T {
+    try {
+      return JSON.parse(this.base64UrlToBuffer(value).toString('utf8')) as T;
+    } catch {
+      throw new UnauthorizedException(
+        'Bearer-Token kann nicht gelesen werden.',
+      );
+    }
+  }
+
+  private base64UrlToBuffer(value: string) {
+    return Buffer.from(value, 'base64url');
+  }
+
+  private readRequiredEnv(key: string) {
+    const value = process.env[key]?.trim();
+
+    if (!value) {
+      this.logger.error(`Entra-Konfiguration unvollständig: ${key} fehlt.`);
+      throw new UnauthorizedException(
+        'Authentifizierung ist nicht vollständig konfiguriert.',
+      );
+    }
+
+    return value;
+  }
+
+  private readExpectedAudiences(clientId: string) {
+    const configuredAudiences = process.env.ENTRA_AUDIENCE?.split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    return configuredAudiences?.length ? configuredAudiences : [clientId];
   }
 }
