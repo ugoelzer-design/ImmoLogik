@@ -18,7 +18,7 @@ mkdir -p "$workdir"
 
 echo "Creating PostgreSQL dump..."
 if [ -n "${DATABASE_URL:-}" ]; then
-  pg_dump "$DATABASE_URL" \
+  pg_dump "${DATABASE_URL%%\?*}" \
     --clean \
     --if-exists \
     > "$workdir/immologik-postgres-$timestamp.sql"
@@ -52,9 +52,10 @@ if [ "$keep_days" -gt 0 ] 2>/dev/null; then
   echo "Deleting remote timestamped backups older than $keep_days days..."
   rclone delete "$backup_remote" \
     --min-age "${keep_days}d" \
-    --include "immologik-postgres-*.sql" \
-    --include "immologik-files-*.tar.gz" \
-    --exclude "*latest*"
+    --filter "+ immologik-postgres-*.sql" \
+    --filter "+ immologik-files-*.tar.gz" \
+    --filter "- *latest*" \
+    --filter "- *"
 fi
 
 echo "Backup finished."
