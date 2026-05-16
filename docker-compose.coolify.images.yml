@@ -106,6 +106,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-immologik}
       POSTGRES_USER: ${POSTGRES_USER:-immologik}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-immologik}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-immologik}?schema=public}
       BACKUP_REMOTE: ${BACKUP_REMOTE}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-7}
     volumes:

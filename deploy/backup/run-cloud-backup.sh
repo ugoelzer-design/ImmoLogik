@@ -13,22 +13,29 @@ if [ -z "$backup_remote" ]; then
   exit 1
 fi
 
-if [ -z "${POSTGRES_PASSWORD:-}" ]; then
-  echo "POSTGRES_PASSWORD is not set."
-  exit 1
-fi
-
 rm -rf "$workdir"
 mkdir -p "$workdir"
 
 echo "Creating PostgreSQL dump..."
-PGPASSWORD="$POSTGRES_PASSWORD" pg_dump \
-  -h "${POSTGRES_HOST:-postgres}" \
-  -U "$db_user" \
-  -d "$db_name" \
-  --clean \
-  --if-exists \
-  > "$workdir/immologik-postgres-$timestamp.sql"
+if [ -n "${DATABASE_URL:-}" ]; then
+  pg_dump "$DATABASE_URL" \
+    --clean \
+    --if-exists \
+    > "$workdir/immologik-postgres-$timestamp.sql"
+else
+  if [ -z "${POSTGRES_PASSWORD:-}" ]; then
+    echo "POSTGRES_PASSWORD or DATABASE_URL is required."
+    exit 1
+  fi
+
+  PGPASSWORD="$POSTGRES_PASSWORD" pg_dump \
+    -h "${POSTGRES_HOST:-postgres}" \
+    -U "$db_user" \
+    -d "$db_name" \
+    --clean \
+    --if-exists \
+    > "$workdir/immologik-postgres-$timestamp.sql"
+fi
 
 cp "$workdir/immologik-postgres-$timestamp.sql" "$workdir/immologik-postgres-latest.sql"
 

@@ -25,6 +25,7 @@ Environment Variables:
 
 - `BACKUP_REMOTE=onedrive:ImmoLogik Backups`
 - `BACKUP_KEEP_DAYS=7`
+- `DATABASE_URL` wird verwendet, wenn gesetzt. Andernfalls nutzt der Backup-Container `POSTGRES_DB`, `POSTGRES_USER` und `POSTGRES_PASSWORD`.
 
 Fuer Google Drive kann spaeter z.B. genutzt werden:
 
