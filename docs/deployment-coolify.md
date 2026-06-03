@@ -127,3 +127,21 @@ Fuer automatische OneDrive- oder Google-Drive-Backups siehe `docs/backup-cloud.m
 3. Web erreichbar: `/`
 4. Dokumenten-Storage-Status in der App pruefen.
 5. Testobjekt, Dokument und Nebenkostenabrechnung anlegen.
+
+## Postgres-Auth nach Crash oder Restore
+
+Wenn der API-Container mit `P1000: Authentication failed` neu startet, zuerst diese Punkte pruefen:
+
+1. In Coolify `DATABASE_URL` entfernen, wenn das Postgres-Passwort keine URL-Sonderzeichen enthaelt. Die Compose-Datei baut die URL dann automatisch aus `POSTGRES_USER`, `POSTGRES_PASSWORD` und `POSTGRES_DB`.
+2. Falls `DATABASE_URL` gesetzt bleiben muss, muss das Passwort darin URL-encodiert sein. Beispiel: `/` wird `%2F`, `@` wird `%40`, `#` wird `%23`.
+3. Sicherstellen, dass `ALTER USER` im App-Postgres-Container ausgefuehrt wurde, nicht in der Coolify-eigenen Datenbank oder einem alten Container.
+4. Nach jeder Aenderung API neu starten, damit Prisma die aktualisierte Umgebung liest.
+
+Gezielter Auth-Test im App-Postgres-Container:
+
+```bash
+docker exec -e PGPASSWORD='dein-postgres-passwort' -it <postgres-container> \
+  psql -h 127.0.0.1 -U immologik -d immologik -c 'select current_user, current_database();'
+```
+
+Wenn dieser Test funktioniert, Prisma aber weiter `P1000` meldet, ist fast immer die im API-Container ankommende `DATABASE_URL` abweichend oder falsch encodiert.
