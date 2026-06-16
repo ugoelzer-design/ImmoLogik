@@ -4,10 +4,33 @@ type RequestOptions = RequestInit & {
   query?: Record<string, QueryValue>;
 };
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ||
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
-  "http://localhost:3000";
+function stripTrailingSlash(value?: string) {
+  return value?.replace(/\/$/, "");
+}
+
+/**
+ * Liefert die API-Basis-URL kontextabhaengig:
+ *  - Browser  -> gleiche Domain wie die Seite (ueber das Gateway). Basic-Auth/
+ *                Cookies werden vom Browser automatisch mitgeschickt.
+ *  - Server   -> interner Service-Aufruf im Container-Netzwerk. Umgeht das
+ *                Gateway und dessen Basic-Auth komplett (sonst 401 -> leere Daten).
+ */
+function resolveApiBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    return (
+      stripTrailingSlash(process.env.NEXT_PUBLIC_API_BASE_URL) ||
+      stripTrailingSlash(process.env.NEXT_PUBLIC_API_URL) ||
+      `${window.location.origin}/api/v1`
+    );
+  }
+
+  return (
+    stripTrailingSlash(process.env.API_INTERNAL_URL) ||
+    "http://api:4000/api/v1"
+  );
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
 
 function buildUrl(path: string, query?: Record<string, QueryValue>) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -36,6 +59,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     ...init,
     headers: requestHeaders,
     cache: "no-store",
+    credentials: "include",
   });
 
   if (!response.ok) {
@@ -60,27 +84,4 @@ export const apiClient = {
   get: <T>(path: string, options?: Omit<RequestOptions, "method" | "body">) =>
     request<T>(path, { ...options, method: "GET" }),
 
-  post: <T, B = unknown>(path: string, body?: B, options?: Omit<RequestOptions, "method" | "body">) =>
-    request<T>(path, {
-      ...options,
-      method: "POST",
-      body: body ? JSON.stringify(body) : undefined,
-    }),
-
-  put: <T, B = unknown>(path: string, body?: B, options?: Omit<RequestOptions, "method" | "body">) =>
-    request<T>(path, {
-      ...options,
-      method: "PUT",
-      body: body ? JSON.stringify(body) : undefined,
-    }),
-
-  patch: <T, B = unknown>(path: string, body?: B, options?: Omit<RequestOptions, "method" | "body">) =>
-    request<T>(path, {
-      ...options,
-      method: "PATCH",
-      body: body ? JSON.stringify(body) : undefined,
-    }),
-
-  del: <T>(path: string, options?: Omit<RequestOptions, "method" | "body">) =>
-    request<T>(path, { ...options, method: "DELETE" }),
-};
+  post: <T, B = unknown>(path: string, body?: B, options?: Omit<RequestOptions, "method" | "

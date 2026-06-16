@@ -77,6 +77,8 @@ services:
       NEXT_TELEMETRY_DISABLED: 1
       PORT: 3001
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+      # Serverseitige (Container-interne) API-URL: umgeht Gateway + Basic-Auth.
+      API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:4000/api/v1}
 
   gateway:
     image: ghcr.io/ugoelzer-design/immologik-gateway:${IMAGE_TAG:-master}
@@ -110,12 +112,4 @@ services:
       BACKUP_REMOTE: ${BACKUP_REMOTE}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-7}
     volumes:
-      - minio_data:/minio-data:ro
-      - rclone_config:/root/.config/rclone
-
-volumes:
-  postgres_data:
-  minio_data:
-  caddy_data:
-  caddy_config:
-  rclone_config:
+      - minio_dat
