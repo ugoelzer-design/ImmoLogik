@@ -112,4 +112,12 @@ services:
       BACKUP_REMOTE: ${BACKUP_REMOTE}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-7}
     volumes:
-      - minio_dat
+      - minio_data:/minio-data:ro
+      - rclone_config:/root/.config/rclone
+
+volumes:
+  postgres_data:
+  minio_data:
+  caddy_data:
+  caddy_config:
+  rclone_config:

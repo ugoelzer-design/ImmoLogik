@@ -84,4 +84,27 @@ export const apiClient = {
   get: <T>(path: string, options?: Omit<RequestOptions, "method" | "body">) =>
     request<T>(path, { ...options, method: "GET" }),
 
-  post: <T, B = unknown>(path: string, body?: B, options?: Omit<RequestOptions, "method" | "
+  post: <T, B = unknown>(path: string, body?: B, options?: Omit<RequestOptions, "method" | "body">) =>
+    request<T>(path, {
+      ...options,
+      method: "POST",
+      body: body ? JSON.stringify(body) : undefined,
+    }),
+
+  put: <T, B = unknown>(path: string, body?: B, options?: Omit<RequestOptions, "method" | "body">) =>
+    request<T>(path, {
+      ...options,
+      method: "PUT",
+      body: body ? JSON.stringify(body) : undefined,
+    }),
+
+  patch: <T, B = unknown>(path: string, body?: B, options?: Omit<RequestOptions, "method" | "body">) =>
+    request<T>(path, {
+      ...options,
+      method: "PATCH",
+      body: body ? JSON.stringify(body) : undefined,
+    }),
+
+  del: <T>(path: string, options?: Omit<RequestOptions, "method" | "body">) =>
+    request<T>(path, { ...options, method: "DELETE" }),
+};
