@@ -6,8 +6,8 @@ Stand: 17.06.2026
 
 - `Tenant` und `User` existieren bereits im Prisma-Schema.
 - `User.tenantId` verweist auf `Tenant`.
-- Fachmodelle sind noch nicht mandantengebunden:
-  - `PropertyObject`
+- Fachmodelle sind teilweise mandantengebunden:
+  - `PropertyObject` hat `appTenantId` als Pilot.
   - `Document`
   - `RentUnit`
   - `Mieter`
@@ -17,7 +17,7 @@ Stand: 17.06.2026
   - `ReadingCampaign`
   - `ReadingAccess`
   - `UtilityStatement`
-- `AuthGuard` prueft Entra-Bearer-Token, legt aber noch keinen User-/Tenant-Kontext am Request ab.
+- `AuthGuard` prueft Entra-Bearer-Token und legt User-/Tenant-Kontext am Request ab.
 - `@Public()` Endpunkte existieren fuer Health und Mieter-Ablesungen.
 
 ## Zielbild
@@ -136,8 +136,8 @@ Spaeter:
 
 1. Request-Kontext + Tests. Erledigt: AuthGuard setzt `request.user`, `@CurrentUser()` ist vorhanden.
 2. Default-Mandant-Seed. Erledigt: Prisma-Seed legt `Tenant(default)` und Admin-User idempotent an.
-3. Migration `appTenantId` mit Backfill.
-4. Objekte mandantenfaehig machen.
+3. Migration `PropertyObject.appTenantId` mit Backfill. Erledigt fuer Objekt-Pilot.
+4. Objekte mandantenfaehig machen. Erledigt: Objekt-Endpunkte nutzen `@CurrentUser()` und filtern nach App-Mandant.
 5. Dokumente mandantenfaehig machen.
 6. Restliche Services nachziehen.
 7. Entra-User-Mapping aktivieren.
@@ -151,4 +151,4 @@ Spaeter:
 
 ## Empfehlung
 
-Naechster Code-Schritt: Request-Kontext und Default-Mandant vorbereiten, noch ohne Fachmodell-Migration. Danach eine kleine Migration fuer `PropertyObject.appTenantId` als Pilot.
+Naechster Code-Schritt: Dokumente mandantenfaehig machen und Fremd-ID-Pruefungen gegen denselben App-Mandanten nachziehen.

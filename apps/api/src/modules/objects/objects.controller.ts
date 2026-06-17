@@ -8,6 +8,8 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../../auth/current-user.decorator';
+import type { AuthenticatedUser } from '../../auth/authenticated-user';
 import { getPaginationOptions } from '../../common/pagination';
 import { CreateObjectDto } from './dto/create-object.dto';
 import { ObjectsService } from './objects.service';
@@ -18,27 +20,43 @@ export class ObjectsController {
   constructor(private readonly objectsService: ObjectsService) {}
 
   @Get()
-  findAll(@Query('page') page?: string, @Query('pageSize') pageSize?: string) {
-    return this.objectsService.findAll(getPaginationOptions({ page, pageSize }));
+  findAll(
+    @CurrentUser() user: AuthenticatedUser | undefined,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.objectsService.findAll(
+      getPaginationOptions({ page, pageSize }),
+      user?.appTenantSlug,
+    );
   }
 
   @Get('next-display-id')
-  getNextDisplayIdPreview() {
-    return this.objectsService.getNextDisplayIdPreview();
+  getNextDisplayIdPreview(@CurrentUser() user: AuthenticatedUser | undefined) {
+    return this.objectsService.getNextDisplayIdPreview(user?.appTenantSlug);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.objectsService.findOne(id);
+  findOne(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ) {
+    return this.objectsService.findOne(id, user?.appTenantSlug);
   }
 
   @Post()
-  create(@Body() createObjectDto: CreateObjectDto) {
-    return this.objectsService.create(createObjectDto);
+  create(
+    @Body() createObjectDto: CreateObjectDto,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ) {
+    return this.objectsService.create(createObjectDto, user?.appTenantSlug);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.objectsService.remove(id);
+  remove(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ) {
+    return this.objectsService.remove(id, user?.appTenantSlug);
   }
 }

@@ -18,28 +18,36 @@ export class ObjectsService {
     private readonly minio: MinioService,
   ) {}
 
-  findAll(pagination: Pick<Prisma.PropertyObjectFindManyArgs, 'skip' | 'take'> = {}) {
+  async findAll(
+    pagination: Pick<Prisma.PropertyObjectFindManyArgs, 'skip' | 'take'> = {},
+    appTenantSlug = 'default',
+  ) {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
+
     return this.prisma.propertyObject.findMany({
       ...pagination,
+      where: { appTenantId },
       orderBy: { displayId: 'asc' },
     });
   }
 
-  async getNextDisplayIdPreview() {
+  async getNextDisplayIdPreview(appTenantSlug = 'default') {
     return {
-      displayId: await this.getNextDisplayId(),
+      displayId: await this.getNextDisplayId(appTenantSlug),
     };
   }
 
-  async findOne(id: string) {
-    const object = await this.prisma.propertyObject.findUnique({
-      where: { id },
+  async findOne(id: string, appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
+    const object = await this.prisma.propertyObject.findFirst({
+      where: { id, appTenantId },
     });
     if (!object) throw new NotFoundException('Objekt nicht gefunden.');
     return object;
   }
 
-  async create(createObjectDto: CreateObjectDto) {
+  async create(createObjectDto: CreateObjectDto, appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const name = createObjectDto.name?.trim();
     const address = createObjectDto.address?.trim();
     const unitsRaw = Number(createObjectDto.units);
@@ -52,10 +60,11 @@ export class ObjectsService {
         'Einheiten müssen als ganze Zahl ab 1 übergeben werden.',
       );
 
-    const displayId = await this.getNextDisplayId();
+    const displayId = await this.getNextDisplayId(appTenantSlug);
 
     const obj = await this.prisma.propertyObject.create({
       data: {
+        appTenantId,
         displayId,
         name,
         address,
@@ -79,9 +88,10 @@ export class ObjectsService {
     return obj;
   }
 
-  async remove(id: string) {
-    const object = await this.prisma.propertyObject.findUnique({
-      where: { id },
+  async remove(id: string, appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
+    const object = await this.prisma.propertyObject.findFirst({
+      where: { id, appTenantId },
       include: {
         _count: {
           select: {
@@ -109,8 +119,10 @@ export class ObjectsService {
     return this.prisma.propertyObject.delete({ where: { id } });
   }
 
-  private async getNextDisplayId() {
+  private async getNextDisplayId(appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const objects = await this.prisma.propertyObject.findMany({
+      where: { appTenantId },
       select: { displayId: true },
     });
     let maxNumber = 0;
@@ -122,5 +134,18 @@ export class ObjectsService {
         maxNumber = currentNumber;
     }
     return `WEG-${String(maxNumber + 1).padStart(3, '0')}`;
+  }
+
+  private async resolveAppTenantId(appTenantSlug: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug: appTenantSlug },
+      select: { id: true },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Mandant nicht gefunden.');
+    }
+
+    return tenant.id;
   }
 }

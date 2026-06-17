@@ -41,16 +41,18 @@ async function seedDefaultAppTenant() {
       tenantId: tenant.id,
     },
   });
+
+  return tenant;
 }
 
 async function main() {
-  await seedDefaultAppTenant();
+  const appTenant = await seedDefaultAppTenant();
 
   await prisma.propertyObject.createMany({
     data: [
-      { displayId: 'WEG-001', name: 'Bergstrasse 12', address: 'Bergstrasse 12, 10115 Berlin', type: 'Wohnobjekt', status: 'Aktiv', units: 4, occupancy: '75%', monthlyTargetRent: '3200 EUR', note: '' },
-      { displayId: 'WEG-002', name: 'Rheinallee 5', address: 'Rheinallee 5, 50668 Koeln', type: 'Wohnobjekt', status: 'Aktiv', units: 6, occupancy: '100%', monthlyTargetRent: '5400 EUR', note: '' },
-      { displayId: 'WEG-003', name: 'Hafenstrasse 21', address: 'Hafenstrasse 21, 20359 Hamburg', type: 'Wohnobjekt', status: 'Aktiv', units: 3, occupancy: '67%', monthlyTargetRent: '2700 EUR', note: '' },
+      { appTenantId: appTenant.id, displayId: 'WEG-001', name: 'Bergstrasse 12', address: 'Bergstrasse 12, 10115 Berlin', type: 'Wohnobjekt', status: 'Aktiv', units: 4, occupancy: '75%', monthlyTargetRent: '3200 EUR', note: '' },
+      { appTenantId: appTenant.id, displayId: 'WEG-002', name: 'Rheinallee 5', address: 'Rheinallee 5, 50668 Koeln', type: 'Wohnobjekt', status: 'Aktiv', units: 6, occupancy: '100%', monthlyTargetRent: '5400 EUR', note: '' },
+      { appTenantId: appTenant.id, displayId: 'WEG-003', name: 'Hafenstrasse 21', address: 'Hafenstrasse 21, 20359 Hamburg', type: 'Wohnobjekt', status: 'Aktiv', units: 3, occupancy: '67%', monthlyTargetRent: '2700 EUR', note: '' },
     ],
     skipDuplicates: true,
   });
