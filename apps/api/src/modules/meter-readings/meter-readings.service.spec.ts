@@ -16,13 +16,15 @@ describe('MeterReadingsService', () => {
         findUnique: jest.fn(),
       },
       readingAccess: {
-        upsert: jest.fn(),
+        createMany: jest.fn(),
         findUnique: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
       meter: {
-        upsert: jest.fn(),
+        createMany: jest.fn(),
         findMany: jest.fn(),
+        updateMany: jest.fn(),
       },
       meterReading: {
         findFirst: jest.fn(),
@@ -83,8 +85,58 @@ describe('MeterReadingsService', () => {
       reportYear: 2025,
     });
 
-    expect(prisma.meter.upsert).toHaveBeenCalledTimes(3);
-    expect(prisma.readingAccess.upsert).toHaveBeenCalledTimes(1);
+    expect(prisma.meter.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          objectId: 'object-1',
+          rentUnitId: 'unit-1',
+          scope: 'apartment',
+          type: 'heizung',
+          label: 'Heizung',
+          unit: 'kWh',
+        },
+        {
+          objectId: 'object-1',
+          rentUnitId: 'unit-1',
+          scope: 'apartment',
+          type: 'kaltwasser',
+          label: 'Kaltwasser',
+          unit: 'm³',
+        },
+        {
+          objectId: 'object-1',
+          rentUnitId: 'unit-1',
+          scope: 'apartment',
+          type: 'warmwasser',
+          label: 'Warmwasser',
+          unit: 'm³',
+        },
+      ],
+      skipDuplicates: true,
+    });
+    expect(prisma.meter.updateMany).toHaveBeenCalledTimes(3);
+    expect(prisma.readingAccess.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          campaignId: 'campaign-1',
+          tenantId: 'tenant-1',
+          rentUnitId: 'unit-1',
+          status: 'offen',
+        }),
+      ],
+      skipDuplicates: true,
+    });
+    expect(prisma.readingAccess.updateMany).toHaveBeenCalledWith({
+      where: {
+        campaignId: 'campaign-1',
+        tenantId: {
+          in: ['tenant-1'],
+        },
+      },
+      data: expect.objectContaining({
+        status: 'offen',
+      }),
+    });
     expect(result.recipients).toHaveLength(1);
     expect(result.recipients[0].unitLabel).toBe('Wohnung 1');
   });

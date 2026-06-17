@@ -106,33 +106,39 @@ export class MeterReadingsService {
       },
     });
 
-    for (const tenant of activeTenants) {
-      await this.ensureStandardMeters(dto.objectId, tenant.rentUnitId);
+    const sentAt = new Date();
 
-      await this.prisma.readingAccess.upsert({
-        where: {
-          campaignId_tenantId: {
-            campaignId: campaign.id,
-            tenantId: tenant.id,
-          },
+    await this.ensureStandardMetersForUnits(
+      dto.objectId,
+      activeTenants.map((tenant) => tenant.rentUnitId),
+    );
+
+    await this.prisma.readingAccess.createMany({
+      data: activeTenants.map((tenant) => ({
+        campaignId: campaign.id,
+        tenantId: tenant.id,
+        rentUnitId: tenant.rentUnitId,
+        token: this.createToken(),
+        expiresAt,
+        status: 'offen',
+        sentAt,
+      })),
+      skipDuplicates: true,
+    });
+
+    await this.prisma.readingAccess.updateMany({
+      where: {
+        campaignId: campaign.id,
+        tenantId: {
+          in: activeTenants.map((tenant) => tenant.id),
         },
-        update: {
-          rentUnitId: tenant.rentUnitId,
-          expiresAt,
-          status: 'offen',
-          sentAt: new Date(),
-        },
-        create: {
-          campaignId: campaign.id,
-          tenantId: tenant.id,
-          rentUnitId: tenant.rentUnitId,
-          token: this.createToken(),
-          expiresAt,
-          status: 'offen',
-          sentAt: new Date(),
-        },
-      });
-    }
+      },
+      data: {
+        expiresAt,
+        status: 'offen',
+        sentAt,
+      },
+    });
 
     const populatedCampaign = await this.prisma.readingCampaign.findUnique({
       where: { id: campaign.id },
@@ -328,31 +334,44 @@ export class MeterReadingsService {
     return this.getAccess(token);
   }
 
-  private async ensureStandardMeters(objectId: string, rentUnitId: string) {
-    for (const template of STANDARD_APARTMENT_METERS) {
-      await this.prisma.meter.upsert({
-        where: {
-          objectId_rentUnitId_type_label: {
-            objectId,
-            rentUnitId,
-            type: template.type,
-            label: template.label,
-          },
-        },
-        update: {
-          unit: template.unit,
-          scope: 'apartment',
-        },
-        create: {
+  private async ensureStandardMetersForUnits(
+    objectId: string,
+    rentUnitIds: string[],
+  ) {
+    const uniqueRentUnitIds = [...new Set(rentUnitIds)];
+
+    await this.prisma.meter.createMany({
+      data: uniqueRentUnitIds.flatMap((rentUnitId) =>
+        STANDARD_APARTMENT_METERS.map((template) => ({
           objectId,
           rentUnitId,
           scope: 'apartment',
           type: template.type,
           label: template.label,
           unit: template.unit,
-        },
-      });
-    }
+        })),
+      ),
+      skipDuplicates: true,
+    });
+
+    await Promise.all(
+      STANDARD_APARTMENT_METERS.map((template) =>
+        this.prisma.meter.updateMany({
+          where: {
+            objectId,
+            rentUnitId: {
+              in: uniqueRentUnitIds,
+            },
+            type: template.type,
+            label: template.label,
+          },
+          data: {
+            unit: template.unit,
+            scope: 'apartment',
+          },
+        }),
+      ),
+    );
   }
 
   private createToken() {
