@@ -1,6 +1,7 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { createSign, generateKeyPairSync } from 'crypto';
+import { PrismaService } from '../prisma/prisma.service';
 import { AuthGuard } from './auth.guard';
 
 function toBase64Url(value: object) {
@@ -40,6 +41,11 @@ describe('AuthGuard', () => {
   const reflector = {
     getAllAndOverride: jest.fn().mockReturnValue(false),
   } as unknown as Reflector;
+  const prisma = {
+    user: {
+      findFirst: jest.fn(),
+    },
+  } as unknown as PrismaService;
 
   beforeEach(() => {
     jest.restoreAllMocks();
@@ -49,6 +55,24 @@ describe('AuthGuard', () => {
       ENTRA_TENANT_ID: 'tenant-1',
       ENTRA_CLIENT_ID: 'client-1',
     };
+    jest.mocked(prisma.user.findFirst).mockResolvedValue({
+      id: 'user-1',
+      email: 'erika@example.com',
+      displayName: 'Erika Beispiel',
+      role: 'ADMIN',
+      isActive: true,
+      tenantId: 'tenant-db-1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      tenant: {
+        id: 'tenant-db-1',
+        name: 'Default Tenant',
+        slug: 'default',
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    } as never);
   });
 
   afterAll(() => {
@@ -58,7 +82,7 @@ describe('AuthGuard', () => {
   it('allows requests in dev auth mode', async () => {
     process.env.AUTH_MODE = 'dev';
     process.env.DEV_TENANT_SLUG = 'default';
-    const guard = new AuthGuard(reflector);
+    const guard = new AuthGuard(reflector, prisma);
     const { context, request } = createContext();
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
@@ -96,7 +120,7 @@ describe('AuthGuard', () => {
       json: async () => ({ keys: [{ ...jwk, kid: 'test-kid' }] }),
     } as Response);
 
-    const guard = new AuthGuard(reflector);
+    const guard = new AuthGuard(reflector, prisma);
     const { context, request } = createContext(`Bearer ${token}`);
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
@@ -109,6 +133,39 @@ describe('AuthGuard', () => {
         appTenantSlug: 'default',
       },
     });
+  });
+
+  it('rejects valid Entra tokens without an active Immologik user', async () => {
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+    });
+    const jwk = publicKey.export({ format: 'jwk' });
+    const now = Math.floor(Date.now() / 1000);
+    const token = createJwt(
+      {
+        aud: 'client-1',
+        exp: now + 300,
+        iss: 'https://login.microsoftonline.com/tenant-1/v2.0',
+        nbf: now - 30,
+        name: 'Unbekannt',
+        oid: 'user-oid-2',
+        preferred_username: 'unknown@example.com',
+      },
+      privateKey,
+    );
+
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ keys: [{ ...jwk, kid: 'test-kid' }] }),
+    } as Response);
+    jest.mocked(prisma.user.findFirst).mockResolvedValue(null);
+
+    const guard = new AuthGuard(reflector, prisma);
+    const { context } = createContext(`Bearer ${token}`);
+
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
   it('rejects tokens for a different audience', async () => {
@@ -131,7 +188,7 @@ describe('AuthGuard', () => {
       json: async () => ({ keys: [{ ...jwk, kid: 'test-kid' }] }),
     } as Response);
 
-    const guard = new AuthGuard(reflector);
+    const guard = new AuthGuard(reflector, prisma);
     const { context } = createContext(`Bearer ${token}`);
 
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(

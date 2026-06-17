@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -8,6 +9,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { createPublicKey, createVerify, type JsonWebKey } from 'crypto';
 import { Request } from 'express';
+import { PrismaService } from '../prisma/prisma.service';
 import type { AuthenticatedUser, RequestWithUser } from './authenticated-user';
 import { IS_PUBLIC_KEY } from './public.decorator';
 
@@ -55,7 +57,10 @@ export class AuthGuard implements CanActivate {
   private readonly logger = new Logger(AuthGuard.name);
   private jwksCache: { expiresAt: number; keys: JwksKey[] } | null = null;
 
-  constructor(private readonly reflector: Reflector) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
@@ -258,7 +263,9 @@ export class AuthGuard implements CanActivate {
     };
   }
 
-  private createUserFromEntraPayload(payload: JwtPayload): AuthenticatedUser {
+  private async createUserFromEntraPayload(
+    payload: JwtPayload,
+  ): Promise<AuthenticatedUser> {
     const email = payload.preferred_username || payload.upn;
     const externalId = payload.oid || email;
 
@@ -268,12 +275,27 @@ export class AuthGuard implements CanActivate {
       );
     }
 
+    const user = await this.prisma.user.findFirst({
+      where: {
+        email: { equals: email, mode: 'insensitive' },
+        isActive: true,
+        tenant: { isActive: true },
+      },
+      include: { tenant: true },
+    });
+
+    if (!user) {
+      throw new ForbiddenException(
+        'Benutzer ist in Immologik nicht freigeschaltet.',
+      );
+    }
+
     return {
       externalId,
-      email,
-      displayName: payload.name || email,
-      roles: payload.roles ?? [],
-      appTenantSlug: process.env.DEFAULT_TENANT_SLUG?.trim() || 'default',
+      email: user.email,
+      displayName: user.displayName || payload.name || user.email,
+      roles: [user.role],
+      appTenantSlug: user.tenant.slug,
     };
   }
 }

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD, Reflector } from '@nestjs/core';
+import { PrismaModule } from '../prisma/prisma.module';
 import { AuthGuard } from './auth.guard';
 
 /**
@@ -7,6 +8,7 @@ import { AuthGuard } from './auth.guard';
  * Muss in AppModule importiert werden.
  */
 @Module({
+  imports: [PrismaModule],
   providers: [
     Reflector,
     {
