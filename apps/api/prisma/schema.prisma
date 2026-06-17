@@ -44,7 +44,7 @@ model User {
 model PropertyObject {
   id                String    @id @default(cuid())
   appTenantId       String
-  displayId         String    @unique
+  displayId         String
   name              String
   address           String
   type              String
@@ -65,6 +65,7 @@ model PropertyObject {
   appTenant         Tenant    @relation(fields: [appTenantId], references: [id], onDelete: Restrict)
 
   @@index([appTenantId])
+  @@unique([appTenantId, displayId])
   @@map("objects")
 }
 
