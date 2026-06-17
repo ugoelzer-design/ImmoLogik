@@ -22,6 +22,8 @@ type FindAllFilters = {
   search?: string;
   fileState?: string;
   actionState?: string;
+  skip?: number;
+  take?: number;
 };
 
 const DOCUMENT_ACTION_STATES = [
@@ -154,6 +156,8 @@ export class DocumentsService {
 
     const docs = await this.prisma.document.findMany({
       where: Object.keys(where).length > 0 ? where : undefined,
+      ...(filters.skip !== undefined ? { skip: filters.skip } : {}),
+      ...(filters.take !== undefined ? { take: filters.take } : {}),
       orderBy: [{ reportYear: 'desc' }, { createdAt: 'desc' }],
     });
     const mappedDocuments = docs.map((doc) => this.mapForList(doc));

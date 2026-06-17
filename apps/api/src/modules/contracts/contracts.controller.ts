@@ -6,8 +6,10 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { getPaginationOptions } from '../../common/pagination';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 
@@ -17,8 +19,10 @@ export class ContractsController {
   constructor(private readonly contractsService: ContractsService) {}
 
   @Get()
-  findAll() {
-    return this.contractsService.findAll();
+  findAll(@Query('page') page?: string, @Query('pageSize') pageSize?: string) {
+    return this.contractsService.findAll(
+      getPaginationOptions({ page, pageSize }),
+    );
   }
 
   @Get(':id')

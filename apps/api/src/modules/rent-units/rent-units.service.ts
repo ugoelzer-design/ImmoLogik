@@ -5,13 +5,17 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateRentUnitDto } from './dto/create-rent-unit.dto';
+import type { Prisma } from '@prisma/client';
 
 @Injectable()
 export class RentUnitsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll() {
-    return this.prisma.rentUnit.findMany({ orderBy: { createdAt: 'asc' } });
+  findAll(pagination: Pick<Prisma.RentUnitFindManyArgs, 'skip' | 'take'> = {}) {
+    return this.prisma.rentUnit.findMany({
+      ...pagination,
+      orderBy: { createdAt: 'asc' },
+    });
   }
 
   findByObject(objectId: string) {

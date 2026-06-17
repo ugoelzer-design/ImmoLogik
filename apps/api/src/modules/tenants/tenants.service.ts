@@ -5,13 +5,15 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
+import type { Prisma } from '@prisma/client';
 
 @Injectable()
 export class TenantsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll() {
+  async findAll(pagination: Pick<Prisma.MieterFindManyArgs, 'skip' | 'take'> = {}) {
     const tenants = await this.prisma.mieter.findMany({
+      ...pagination,
       include: {
         object: true,
         rentUnit: true,

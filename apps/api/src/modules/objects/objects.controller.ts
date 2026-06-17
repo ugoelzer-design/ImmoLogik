@@ -1,5 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { getPaginationOptions } from '../../common/pagination';
 import { CreateObjectDto } from './dto/create-object.dto';
 import { ObjectsService } from './objects.service';
 
@@ -9,8 +18,8 @@ export class ObjectsController {
   constructor(private readonly objectsService: ObjectsService) {}
 
   @Get()
-  findAll() {
-    return this.objectsService.findAll();
+  findAll(@Query('page') page?: string, @Query('pageSize') pageSize?: string) {
+    return this.objectsService.findAll(getPaginationOptions({ page, pageSize }));
   }
 
   @Get('next-display-id')

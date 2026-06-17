@@ -17,6 +17,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import type { Response } from 'express';
+import { getPaginationOptions } from '../../common/pagination';
 import { DocumentsService } from './documents.service';
 
 export const DOCUMENT_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
@@ -82,6 +83,8 @@ export class DocumentsController {
     @Query('search') search?: string,
     @Query('fileState') fileState?: string,
     @Query('actionState') actionState?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
   ) {
     return this.documentsService.findAll({
       objectId,
@@ -92,6 +95,7 @@ export class DocumentsController {
       search,
       fileState,
       actionState,
+      ...getPaginationOptions({ page, pageSize }),
     });
   }
 

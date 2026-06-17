@@ -6,8 +6,10 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { getPaginationOptions } from '../../common/pagination';
 import { TenantsService } from './tenants.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 
@@ -17,8 +19,8 @@ export class TenantsController {
   constructor(private readonly tenantsService: TenantsService) {}
 
   @Get()
-  findAll() {
-    return this.tenantsService.findAll();
+  findAll(@Query('page') page?: string, @Query('pageSize') pageSize?: string) {
+    return this.tenantsService.findAll(getPaginationOptions({ page, pageSize }));
   }
 
   @Get(':id')

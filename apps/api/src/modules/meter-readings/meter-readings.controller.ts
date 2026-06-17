@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { getPaginationOptions } from '../../common/pagination';
 import { CreateReadingCampaignDto } from './dto/create-reading-campaign.dto';
 import { SubmitMeterReadingsDto } from './dto/submit-meter-readings.dto';
 import { MeterReadingsService } from './meter-readings.service';
@@ -11,8 +12,15 @@ export class MeterReadingsController {
   constructor(private readonly meterReadingsService: MeterReadingsService) {}
 
   @Get('campaigns')
-  findCampaigns(@Query('objectId') objectId?: string) {
-    return this.meterReadingsService.findCampaigns(objectId);
+  findCampaigns(
+    @Query('objectId') objectId?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.meterReadingsService.findCampaigns(
+      objectId,
+      getPaginationOptions({ page, pageSize }),
+    );
   }
 
   @Post('campaigns')

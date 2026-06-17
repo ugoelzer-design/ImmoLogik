@@ -6,8 +6,10 @@
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { getPaginationOptions } from '../../common/pagination';
 import { RentUnitsService } from './rent-units.service';
 import { CreateRentUnitDto } from './dto/create-rent-unit.dto';
 
@@ -17,8 +19,10 @@ export class RentUnitsController {
   constructor(private readonly rentUnitsService: RentUnitsService) {}
 
   @Get()
-  findAll() {
-    return this.rentUnitsService.findAll();
+  findAll(@Query('page') page?: string, @Query('pageSize') pageSize?: string) {
+    return this.rentUnitsService.findAll(
+      getPaginationOptions({ page, pageSize }),
+    );
   }
 
   @Get('by-object/:objectId')

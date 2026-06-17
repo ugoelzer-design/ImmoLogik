@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateObjectDto } from './dto/create-object.dto';
+import type { Prisma } from '@prisma/client';
 
 @Injectable()
 export class ObjectsService {
@@ -17,8 +18,9 @@ export class ObjectsService {
     private readonly minio: MinioService,
   ) {}
 
-  findAll() {
+  findAll(pagination: Pick<Prisma.PropertyObjectFindManyArgs, 'skip' | 'take'> = {}) {
     return this.prisma.propertyObject.findMany({
+      ...pagination,
       orderBy: { displayId: 'asc' },
     });
   }

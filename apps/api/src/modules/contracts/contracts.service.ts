@@ -5,13 +5,15 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateContractDto } from './dto/create-contract.dto';
+import type { Prisma } from '@prisma/client';
 
 @Injectable()
 export class ContractsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll() {
+  async findAll(pagination: Pick<Prisma.VertragFindManyArgs, 'skip' | 'take'> = {}) {
     const contracts = await this.prisma.vertrag.findMany({
+      ...pagination,
       include: {
         object: true,
         tenant: {

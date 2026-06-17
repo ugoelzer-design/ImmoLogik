@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { Prisma } from '@prisma/client';
 import { CreateReadingCampaignDto } from './dto/create-reading-campaign.dto';
 import { SubmitMeterReadingsDto } from './dto/submit-meter-readings.dto';
 
@@ -18,9 +19,13 @@ const STANDARD_APARTMENT_METERS = [
 export class MeterReadingsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findCampaigns(objectId?: string) {
+  async findCampaigns(
+    objectId?: string,
+    pagination: Pick<Prisma.ReadingCampaignFindManyArgs, 'skip' | 'take'> = {},
+  ) {
     const campaigns = await this.prisma.readingCampaign.findMany({
       where: objectId ? { objectId } : undefined,
+      ...pagination,
       include: {
         object: true,
         access: {
