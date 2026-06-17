@@ -11,6 +11,7 @@ import {
 import { StatusBadge } from "@/components/ui/status-badge";
 import { createMissingDocument } from "@/features/documents/services/documents.service";
 import type { RentUnit } from "@/features/finances/services/rent-units.service";
+import type { UtilityStatementsWorkspaceSettlement } from "@/features/finances/services/utility-statements.service";
 import {
   buildDocumentRequirements,
   getMissingDocumentRequirements,
@@ -35,6 +36,7 @@ type ObjectDetailProps = {
   contracts?: Contract[];
   rentUnits?: RentUnit[];
   meterDefinitions?: MeterDefinition[];
+  utilityStatements?: UtilityStatementsWorkspaceSettlement[];
   readingCampaigns?: ReadingCampaign[];
 };
 
@@ -5712,6 +5714,82 @@ function mergeMeters(apiMeters: LocalMeter[], storedMeters: LocalMeter[]) {
   ];
 }
 
+function readPositionString(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function mapUtilityStatementsToLocalUtilities(
+  settlements: UtilityStatementsWorkspaceSettlement[],
+  objectId: string,
+  objectDisplayId: string,
+): LocalUtility[] {
+  const utilities = new Map<string, LocalUtility>();
+
+  settlements
+    .filter((settlement) => {
+      return (
+        settlement.objectId === objectId ||
+        normalizeObjectDetailLookupValue(settlement.objektDisplayId) ===
+          normalizeObjectDetailLookupValue(objectDisplayId)
+      );
+    })
+    .forEach((settlement) => {
+      if (!Array.isArray(settlement.positions)) {
+        return;
+      }
+
+      settlement.positions.forEach((position) => {
+        if (!position || typeof position !== "object" || Array.isArray(position)) {
+          return;
+        }
+
+        const record = position as Record<string, unknown>;
+        const label =
+          readPositionString(record, "bezeichnung") ||
+          readPositionString(record, "kostenart");
+        const category = readPositionString(record, "kostenart") || label;
+
+        if (label === "" || category === "") {
+          return;
+        }
+
+        const key = normalizeObjectDetailLookupValue(`${category}|${label}`);
+        if (utilities.has(key)) {
+          return;
+        }
+
+        utilities.set(key, {
+          id: `utility-statement-${settlement.id}-${key}`,
+          category,
+          label,
+          apartmentIds: [],
+          meterIds: [],
+          note: `Aus Nebenkostenabrechnung ${settlement.zeitraumVon} bis ${settlement.zeitraumBis}`,
+        });
+      });
+    });
+
+  return Array.from(utilities.values());
+}
+
+function mergeUtilities(apiUtilities: LocalUtility[], storedUtilities: LocalUtility[]) {
+  const knownIds = new Set(apiUtilities.map((utility) => utility.id));
+  const knownKeys = new Set(
+    apiUtilities.map((utility) =>
+      normalizeObjectDetailLookupValue(`${utility.category}|${utility.label}`),
+    ),
+  );
+
+  return [
+    ...apiUtilities,
+    ...storedUtilities.filter((utility) => {
+      const key = normalizeObjectDetailLookupValue(`${utility.category}|${utility.label}`);
+      return !knownIds.has(utility.id) && !knownKeys.has(key);
+    }),
+  ];
+}
+
 export function ObjectDetail({
   object,
   documents,
@@ -5719,6 +5797,7 @@ export function ObjectDetail({
   contracts = [],
   rentUnits = [],
   meterDefinitions = [],
+  utilityStatements = [],
   readingCampaigns = [],
 }: ObjectDetailProps) {
   const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
@@ -5783,6 +5862,13 @@ export function ObjectDetail({
   const apiApartments = mapRentUnitsToApartments(objectRentUnits);
   const apiTenancies = mapContractsToTenancies(objectContracts, apiApartments);
   const apiMeters = mapMeterDefinitionsToLocalMeters(objectMeterDefinitions);
+  const apiUtilities = object
+    ? mapUtilityStatementsToLocalUtilities(
+        utilityStatements,
+        objectKey,
+        object.displayId,
+      )
+    : [];
   const rawApartments = objectKey
     ? mergeApartments(apiApartments, apartmentsByObject[objectKey] ?? [])
     : [];
@@ -5792,7 +5878,9 @@ export function ObjectDetail({
   const rawMeters = objectKey
     ? mergeMeters(apiMeters, metersByObject[objectKey] ?? [])
     : [];
-  const rawUtilities = objectKey ? utilitiesByObject[objectKey] ?? [] : [];
+  const rawUtilities = objectKey
+    ? mergeUtilities(apiUtilities, utilitiesByObject[objectKey] ?? [])
+    : [];
   const documentRequirements = object
     ? buildDocumentRequirements({
         object,
