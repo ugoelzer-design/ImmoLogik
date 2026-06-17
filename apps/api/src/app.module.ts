@@ -9,6 +9,8 @@ import { MeterReadingsModule } from './modules/meter-readings/meter-readings.mod
 import { UtilityStatementsModule } from './modules/utility-statements/utility-statements.module';
 import { AuthModule } from './auth/auth.module';
 import { RequestLoggingMiddleware } from './common/request-logging.middleware';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { RequestLoggingMiddleware } from './common/request-logging.middleware';
     MeterReadingsModule,
     UtilityStatementsModule,
   ],
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
