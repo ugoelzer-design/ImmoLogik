@@ -20,6 +20,10 @@ model Tenant {
   rentUnits       RentUnit[]
   mieter          Mieter[]
   vertraege       Vertrag[]
+  meters          Meter[]
+  meterReadings   MeterReading[]
+  readingCampaigns ReadingCampaign[]
+  readingAccess   ReadingAccess[]
 }
 
 model User {
@@ -163,6 +167,7 @@ model Vertrag {
 
 model Meter {
   id          String          @id @default(cuid())
+  appTenantId String
   objectId    String
   rentUnitId  String?
   scope       String          @default("apartment")
@@ -172,10 +177,12 @@ model Meter {
   unit        String
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
+  appTenant   Tenant          @relation(fields: [appTenantId], references: [id], onDelete: Restrict)
   object      PropertyObject  @relation(fields: [objectId], references: [id], onDelete: Cascade)
   rentUnit    RentUnit?       @relation(fields: [rentUnitId], references: [id], onDelete: Cascade)
   readings    MeterReading[]
 
+  @@index([appTenantId])
   @@index([objectId])
   @@index([rentUnitId])
   @@unique([objectId, rentUnitId, type, label])
@@ -184,6 +191,7 @@ model Meter {
 
 model MeterReading {
   id              String          @id @default(cuid())
+  appTenantId     String
   meterId         String
   campaignId      String?
   readingDate     DateTime
@@ -194,9 +202,11 @@ model MeterReading {
   submittedById   String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
+  appTenant       Tenant          @relation(fields: [appTenantId], references: [id], onDelete: Restrict)
   meter           Meter           @relation(fields: [meterId], references: [id], onDelete: Cascade)
   campaign        ReadingCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
 
+  @@index([appTenantId])
   @@index([meterId])
   @@index([campaignId])
   @@map("meter_readings")
@@ -204,16 +214,19 @@ model MeterReading {
 
 model ReadingCampaign {
   id         String          @id @default(cuid())
+  appTenantId String
   objectId   String
   reportYear Int
   status     String          @default("offen")
   expiresAt  DateTime?
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
+  appTenant  Tenant          @relation(fields: [appTenantId], references: [id], onDelete: Restrict)
   object     PropertyObject  @relation(fields: [objectId], references: [id], onDelete: Cascade)
   access     ReadingAccess[]
   readings   MeterReading[]
 
+  @@index([appTenantId])
   @@unique([objectId, reportYear])
   @@index([objectId])
   @@map("reading_campaigns")
@@ -221,6 +234,7 @@ model ReadingCampaign {
 
 model ReadingAccess {
   id          String          @id @default(cuid())
+  appTenantId String
   campaignId  String
   tenantId    String
   rentUnitId  String
@@ -231,10 +245,12 @@ model ReadingAccess {
   expiresAt   DateTime?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
+  appTenant   Tenant          @relation(fields: [appTenantId], references: [id], onDelete: Restrict)
   campaign    ReadingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   tenant      Mieter          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   rentUnit    RentUnit        @relation(fields: [rentUnitId], references: [id], onDelete: Cascade)
 
+  @@index([appTenantId])
   @@unique([campaignId, tenantId])
   @@index([tenantId])
   @@index([rentUnitId])

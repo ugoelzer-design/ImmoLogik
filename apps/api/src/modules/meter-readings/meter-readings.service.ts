@@ -22,9 +22,14 @@ export class MeterReadingsService {
   async findCampaigns(
     objectId?: string,
     pagination: Pick<Prisma.ReadingCampaignFindManyArgs, 'skip' | 'take'> = {},
+    appTenantSlug = 'default',
   ) {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const campaigns = await this.prisma.readingCampaign.findMany({
-      where: objectId ? { objectId } : undefined,
+      where: {
+        appTenantId,
+        ...(objectId ? { objectId } : {}),
+      },
       ...pagination,
       include: {
         object: true,
@@ -44,7 +49,11 @@ export class MeterReadingsService {
     return campaigns.map((campaign) => this.toCampaignResponse(campaign));
   }
 
-  async createCampaign(dto: CreateReadingCampaignDto) {
+  async createCampaign(
+    dto: CreateReadingCampaignDto,
+    appTenantSlug = 'default',
+  ) {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const reportYear = Number(dto.reportYear);
 
     if (
@@ -61,12 +70,13 @@ export class MeterReadingsService {
       where: { id: dto.objectId },
     });
 
-    if (!object) {
+    if (!object || object.appTenantId !== appTenantId) {
       throw new NotFoundException('Objekt nicht gefunden.');
     }
 
     const activeTenants = await this.prisma.mieter.findMany({
       where: {
+        appTenantId,
         objectId: dto.objectId,
         status: {
           not: 'Beendet',
@@ -100,10 +110,12 @@ export class MeterReadingsService {
         },
       },
       update: {
+        appTenantId,
         expiresAt,
         status: 'offen',
       },
       create: {
+        appTenantId,
         objectId: dto.objectId,
         reportYear,
         expiresAt,
@@ -116,10 +128,12 @@ export class MeterReadingsService {
     await this.ensureStandardMetersForUnits(
       dto.objectId,
       activeTenants.map((tenant) => tenant.rentUnitId),
+      appTenantId,
     );
 
     await this.prisma.readingAccess.createMany({
       data: activeTenants.map((tenant) => ({
+        appTenantId,
         campaignId: campaign.id,
         tenantId: tenant.id,
         rentUnitId: tenant.rentUnitId,
@@ -133,6 +147,7 @@ export class MeterReadingsService {
 
     await this.prisma.readingAccess.updateMany({
       where: {
+        appTenantId,
         campaignId: campaign.id,
         tenantId: {
           in: activeTenants.map((tenant) => tenant.id),
@@ -192,6 +207,7 @@ export class MeterReadingsService {
 
     const meters = await this.prisma.meter.findMany({
       where: {
+        appTenantId: access.appTenantId,
         objectId: access.campaign.objectId,
         rentUnitId: access.rentUnitId,
       },
@@ -265,6 +281,7 @@ export class MeterReadingsService {
 
     const meters = await this.prisma.meter.findMany({
       where: {
+        appTenantId: access.appTenantId,
         objectId: access.campaign.objectId,
         rentUnitId: access.rentUnitId,
       },
@@ -296,6 +313,7 @@ export class MeterReadingsService {
       const existingReading = await this.prisma.meterReading.findFirst({
         where: {
           meterId: item.meterId,
+          appTenantId: access.appTenantId,
           campaignId: access.campaignId,
         },
       });
@@ -316,6 +334,7 @@ export class MeterReadingsService {
         await this.prisma.meterReading.create({
           data: {
             meterId: item.meterId,
+            appTenantId: access.appTenantId,
             campaignId: access.campaignId,
             value,
             readingDate,
@@ -342,12 +361,14 @@ export class MeterReadingsService {
   private async ensureStandardMetersForUnits(
     objectId: string,
     rentUnitIds: string[],
+    appTenantId: string,
   ) {
     const uniqueRentUnitIds = [...new Set(rentUnitIds)];
 
     await this.prisma.meter.createMany({
       data: uniqueRentUnitIds.flatMap((rentUnitId) =>
         STANDARD_APARTMENT_METERS.map((template) => ({
+          appTenantId,
           objectId,
           rentUnitId,
           scope: 'apartment',
@@ -363,6 +384,7 @@ export class MeterReadingsService {
       STANDARD_APARTMENT_METERS.map((template) =>
         this.prisma.meter.updateMany({
           where: {
+            appTenantId,
             objectId,
             rentUnitId: {
               in: uniqueRentUnitIds,
@@ -389,6 +411,7 @@ export class MeterReadingsService {
 
   private toCampaignResponse(campaign: {
     id: string;
+    appTenantId?: string | null;
     objectId: string;
     reportYear: number;
     status: string;
@@ -397,6 +420,7 @@ export class MeterReadingsService {
     object: { id: string; displayId: string; name: string };
     access: Array<{
       id: string;
+      appTenantId?: string | null;
       token: string;
       status: string;
       sentAt: Date;
@@ -428,5 +452,18 @@ export class MeterReadingsService {
         expiresAt: access.expiresAt?.toISOString() ?? null,
       })),
     };
+  }
+
+  private async resolveAppTenantId(appTenantSlug: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug: appTenantSlug },
+      select: { id: true },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Mandant nicht gefunden.');
+    }
+
+    return tenant.id;
   }
 }

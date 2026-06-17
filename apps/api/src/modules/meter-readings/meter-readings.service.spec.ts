@@ -8,6 +8,7 @@ describe('MeterReadingsService', () => {
 
   beforeEach(() => {
     prisma = {
+      tenant: { findUnique: jest.fn().mockResolvedValue({ id: 'tenant-1' }) },
       propertyObject: { findUnique: jest.fn() },
       mieter: { findMany: jest.fn() },
       readingCampaign: {
@@ -39,12 +40,14 @@ describe('MeterReadingsService', () => {
   it('creates a campaign with recipients for active tenants', async () => {
     prisma.propertyObject.findUnique.mockResolvedValue({
       id: 'object-1',
+      appTenantId: 'tenant-1',
       displayId: 'WEG-001',
       name: 'Musterhaus',
     });
     prisma.mieter.findMany.mockResolvedValue([
       {
         id: 'tenant-1',
+        appTenantId: 'tenant-1',
         fullName: 'Max Mieter',
         email: 'max@example.com',
         rentUnitId: 'unit-1',
@@ -89,6 +92,7 @@ describe('MeterReadingsService', () => {
       data: [
         {
           objectId: 'object-1',
+          appTenantId: 'tenant-1',
           rentUnitId: 'unit-1',
           scope: 'apartment',
           type: 'heizung',
@@ -97,6 +101,7 @@ describe('MeterReadingsService', () => {
         },
         {
           objectId: 'object-1',
+          appTenantId: 'tenant-1',
           rentUnitId: 'unit-1',
           scope: 'apartment',
           type: 'kaltwasser',
@@ -105,6 +110,7 @@ describe('MeterReadingsService', () => {
         },
         {
           objectId: 'object-1',
+          appTenantId: 'tenant-1',
           rentUnitId: 'unit-1',
           scope: 'apartment',
           type: 'warmwasser',
@@ -119,6 +125,7 @@ describe('MeterReadingsService', () => {
       data: [
         expect.objectContaining({
           campaignId: 'campaign-1',
+          appTenantId: 'tenant-1',
           tenantId: 'tenant-1',
           rentUnitId: 'unit-1',
           status: 'offen',
@@ -128,6 +135,7 @@ describe('MeterReadingsService', () => {
     });
     expect(prisma.readingAccess.updateMany).toHaveBeenCalledWith({
       where: {
+        appTenantId: 'tenant-1',
         campaignId: 'campaign-1',
         tenantId: {
           in: ['tenant-1'],
@@ -144,6 +152,7 @@ describe('MeterReadingsService', () => {
   it('rejects campaigns without active tenants', async () => {
     prisma.propertyObject.findUnique.mockResolvedValue({
       id: 'object-1',
+      appTenantId: 'tenant-1',
     });
     prisma.mieter.findMany.mockResolvedValue([]);
 
@@ -158,6 +167,7 @@ describe('MeterReadingsService', () => {
   it('returns access data including meters', async () => {
     prisma.readingAccess.findUnique.mockResolvedValue({
       token: 'token-1',
+      appTenantId: 'tenant-1',
       status: 'offen',
       campaignId: 'campaign-1',
       rentUnitId: 'unit-1',
@@ -196,6 +206,7 @@ describe('MeterReadingsService', () => {
     prisma.readingAccess.findUnique.mockResolvedValue({
       id: 'access-1',
       token: 'token-1',
+      appTenantId: 'tenant-1',
       campaignId: 'campaign-1',
       tenantId: 'tenant-1',
       rentUnitId: 'unit-1',
