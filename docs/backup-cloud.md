@@ -25,6 +25,7 @@ Environment Variables:
 
 - `BACKUP_REMOTE=onedrive:ImmoLogik Backups`
 - `BACKUP_KEEP_DAYS=7`
+- `BACKUP_CRON="30 2 * * *"` fuer taeglich 02:30 UTC
 - `DATABASE_URL` wird verwendet, wenn gesetzt. Andernfalls nutzt der Backup-Container `POSTGRES_DB`, `POSTGRES_USER` und `POSTGRES_PASSWORD`.
 
 Fuer Google Drive kann spaeter z.B. genutzt werden:
@@ -43,7 +44,17 @@ rclone config
 
 Dabei fuer OneDrive einen Remote-Namen wie `onedrive` waehlen. Fuer Google Drive entsprechend `gdrive`.
 
-## Scheduled Task
+## Automatischer Lauf
+
+Empfohlen: `BACKUP_CRON` in Coolify setzen, z.B.:
+
+```sh
+BACKUP_CRON="30 2 * * *"
+```
+
+Der Backup-Container startet dann intern `crond` und fuehrt `run-cloud-backup.sh` taeglich um 02:30 UTC aus. Ohne `BACKUP_CRON` bleibt der Container fuer manuelle oder Coolify Scheduled Task-Laeufe bereit.
+
+## Alternative: Coolify Scheduled Task
 
 In Coolify unter der Resource:
 

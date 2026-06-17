@@ -140,6 +140,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-immologik}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-immologik}?schema=public}
       BACKUP_REMOTE: ${BACKUP_REMOTE}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-7}
+      BACKUP_CRON: ${BACKUP_CRON:-}
     volumes:
       - minio_data:/minio-data:ro
       - rclone_config:/root/.config/rclone
