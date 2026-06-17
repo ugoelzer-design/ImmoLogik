@@ -5,6 +5,9 @@ import { UtilityStatementsService } from './utility-statements.service';
 describe('UtilityStatementsService', () => {
   let service: UtilityStatementsService;
   let prisma: {
+    tenant: {
+      findUnique: jest.Mock;
+    };
     utilityStatement: {
       findMany: jest.Mock;
       findUnique: jest.Mock;
@@ -20,6 +23,9 @@ describe('UtilityStatementsService', () => {
 
   beforeEach(() => {
     prisma = {
+      tenant: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'tenant-1' }),
+      },
       utilityStatement: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
@@ -113,6 +119,7 @@ describe('UtilityStatementsService', () => {
     expect(deleteMany).toHaveBeenCalledWith({
       where: {
         objectDisplayId: { in: ['WEG-001'] },
+        appTenantId: 'tenant-1',
         id: { notIn: ['BKA-2025-001'] },
         status: { not: 'Archiviert' },
       },
@@ -177,6 +184,7 @@ describe('UtilityStatementsService', () => {
 
     expect(prisma.utilityStatement.findMany).toHaveBeenCalledWith({
       where: {
+        appTenantId: 'tenant-1',
         objectDisplayId: 'WEG-001',
         status: 'In Arbeit',
         reportYear: 2025,

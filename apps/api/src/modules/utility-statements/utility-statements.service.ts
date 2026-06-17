@@ -43,6 +43,7 @@ type UtilityStatementValidationIssue = {
 
 type SanitizedSettlementInput = {
   id: string;
+  appTenantId: string;
   objectId: string | null;
   objectDisplayId: string;
   objectName: string;
@@ -62,9 +63,13 @@ type SanitizedSettlementInput = {
 export class UtilityStatementsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listSettlements(filters: ListSettlementsFilters = {}) {
+  async listSettlements(
+    filters: ListSettlementsFilters = {},
+    appTenantSlug = 'default',
+  ) {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const settlements = await this.prisma.utilityStatement.findMany({
-      where: this.buildListWhere(filters),
+      where: this.buildListWhere(filters, appTenantId),
       orderBy: [{ reportYear: 'desc' }, { updatedAt: 'desc' }],
     });
 
@@ -73,8 +78,10 @@ export class UtilityStatementsService {
     };
   }
 
-  async getWorkspace() {
+  async getWorkspace(appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const settlements = await this.prisma.utilityStatement.findMany({
+      where: { appTenantId },
       orderBy: [{ reportYear: 'desc' }, { updatedAt: 'desc' }],
     });
 
@@ -83,7 +90,12 @@ export class UtilityStatementsService {
     };
   }
 
-  async validateSettlement(id: string, input?: WorkspaceSettlementInput) {
+  async validateSettlement(
+    id: string,
+    input?: WorkspaceSettlementInput,
+    appTenantSlug = 'default',
+  ) {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const normalizedId = String(id ?? '').trim();
 
     if (normalizedId === '') {
@@ -94,7 +106,11 @@ export class UtilityStatementsService {
       where: { id: normalizedId },
     });
 
-    if (!existingSettlement && !input) {
+    if (
+      (!existingSettlement ||
+        this.isDifferentAppTenant(existingSettlement, appTenantId)) &&
+      !input
+    ) {
       throw new NotFoundException(
         'Nebenkostenabrechnung wurde nicht gefunden.',
       );
@@ -103,14 +119,23 @@ export class UtilityStatementsService {
     const settlementToValidate = input
       ? await this.sanitizeSettlementInput(
           { ...input, id: normalizedId },
-          { mode: 'validation', existing: existingSettlement ?? undefined },
+          {
+            mode: 'validation',
+            existing:
+              existingSettlement &&
+              !this.isDifferentAppTenant(existingSettlement, appTenantId)
+                ? existingSettlement
+                : undefined,
+            appTenantId,
+          },
         )
       : this.mapExistingSettlementToSanitized(existingSettlement!);
 
     return this.buildValidationResult(settlementToValidate);
   }
 
-  async syncWorkspace(input: SyncWorkspaceInput) {
+  async syncWorkspace(input: SyncWorkspaceInput, appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     if (!Array.isArray(input.settlements)) {
       throw new BadRequestException(
         'Nebenkosten-Arbeitsstand muss als Liste übergeben werden.',
@@ -119,6 +144,7 @@ export class UtilityStatementsService {
 
     const existingSettlements = await this.prisma.utilityStatement.findMany({
       where: {
+        appTenantId,
         id: {
           in: input.settlements.map((item) => this.normalizeId(item.id)),
         },
@@ -132,6 +158,7 @@ export class UtilityStatementsService {
       input.settlements.map((item) =>
         this.sanitizeSettlementInput(item, {
           mode: 'workspace',
+          appTenantId,
           existing: existingById.get(this.normalizeId(item.id)),
         }),
       ),
@@ -147,6 +174,7 @@ export class UtilityStatementsService {
         await tx.utilityStatement.deleteMany({
           where: {
             objectDisplayId: { in: incomingObjectDisplayIds },
+            appTenantId,
             id: { notIn: incomingIds },
             status: { not: 'Archiviert' },
           },
@@ -165,10 +193,15 @@ export class UtilityStatementsService {
       }
     });
 
-    return this.getWorkspace();
+    return this.getWorkspace(appTenantSlug);
   }
 
-  async approveSettlement(id: string, input: WorkspaceSettlementInput) {
+  async approveSettlement(
+    id: string,
+    input: WorkspaceSettlementInput,
+    appTenantSlug = 'default',
+  ) {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const normalizedId = String(id ?? '').trim();
 
     if (normalizedId === '') {
@@ -179,7 +212,10 @@ export class UtilityStatementsService {
       where: { id: normalizedId },
     });
 
-    if (!existingSettlement) {
+    if (
+      !existingSettlement ||
+      this.isDifferentAppTenant(existingSettlement, appTenantId)
+    ) {
       throw new NotFoundException(
         'Nebenkostenabrechnung wurde nicht gefunden.',
       );
@@ -199,7 +235,7 @@ export class UtilityStatementsService {
         ...input,
         id: normalizedId,
       },
-      { mode: 'approval', existing: existingSettlement },
+      { mode: 'approval', existing: existingSettlement, appTenantId },
     );
     const validation = this.buildValidationResult(sanitizedSettlement);
 
@@ -246,6 +282,7 @@ export class UtilityStatementsService {
   ): SanitizedSettlementInput {
     return {
       id: item.id,
+      appTenantId: item.appTenantId,
       objectId: item.objectId,
       objectDisplayId: item.objectDisplayId,
       objectName: item.objectName,
@@ -274,8 +311,11 @@ export class UtilityStatementsService {
     options: {
       mode: 'workspace' | 'approval' | 'validation';
       existing?: UtilityStatement | null;
+      appTenantId?: string;
     } = { mode: 'workspace' },
   ): Promise<SanitizedSettlementInput> {
+    const appTenantId =
+      options.appTenantId ?? (await this.resolveAppTenantId('default'));
     const id = this.normalizeId(item.id);
     const objectDisplayId = this.readNormalizedText(
       item.objectDisplayId,
@@ -310,6 +350,7 @@ export class UtilityStatementsService {
     const resolvedObjectId = await this.resolveObjectId(
       item.objectId,
       objectDisplayId,
+      appTenantId,
     );
     const isPersistedArchived =
       options.existing?.status === 'Archiviert' &&
@@ -325,6 +366,7 @@ export class UtilityStatementsService {
 
     return {
       id,
+      appTenantId,
       objectId: resolvedObjectId,
       objectDisplayId,
       objectName,
@@ -377,15 +419,21 @@ export class UtilityStatementsService {
   private async resolveObjectId(
     objectId: string | null | undefined,
     objectDisplayId: string,
+    appTenantId: string,
   ) {
     const normalizedObjectId = String(objectId ?? '').trim();
 
     if (normalizedObjectId !== '') {
-      return normalizedObjectId;
+      const object = await this.prisma.propertyObject.findFirst({
+        where: { id: normalizedObjectId, appTenantId },
+        select: { id: true },
+      });
+
+      return object?.id ?? null;
     }
 
     const object = await this.prisma.propertyObject.findFirst({
-      where: { displayId: objectDisplayId },
+      where: { displayId: objectDisplayId, appTenantId },
       select: { id: true },
     });
 
@@ -498,6 +546,7 @@ export class UtilityStatementsService {
 
   private buildListWhere(
     filters: ListSettlementsFilters,
+    appTenantId: string,
   ): Prisma.UtilityStatementWhereInput {
     const objectId = String(filters.objectId ?? '').trim();
     const objectDisplayId = String(filters.objectDisplayId ?? '')
@@ -513,7 +562,7 @@ export class UtilityStatementsService {
     const reportYear = this.parseReportYear(filters.reportYear);
     const q = String(filters.q ?? '').trim();
 
-    const where: Prisma.UtilityStatementWhereInput = {};
+    const where: Prisma.UtilityStatementWhereInput = { appTenantId };
 
     if (objectId !== '') {
       where.objectId = objectId;
@@ -738,6 +787,26 @@ export class UtilityStatementsService {
           ? item.finalReportSnapshot
           : null,
     };
+  }
+
+  private async resolveAppTenantId(appTenantSlug: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug: appTenantSlug },
+      select: { id: true },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Mandant nicht gefunden.');
+    }
+
+    return tenant.id;
+  }
+
+  private isDifferentAppTenant(
+    record: { appTenantId?: string | null },
+    appTenantId: string,
+  ) {
+    return record.appTenantId !== undefined && record.appTenantId !== appTenantId;
   }
 
   private mapSettlementSummary(item: UtilityStatement) {

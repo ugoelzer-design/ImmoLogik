@@ -24,6 +24,7 @@ model Tenant {
   meterReadings   MeterReading[]
   readingCampaigns ReadingCampaign[]
   readingAccess   ReadingAccess[]
+  utilityStatements UtilityStatement[]
 }
 
 model User {
@@ -259,6 +260,7 @@ model ReadingAccess {
 
 model UtilityStatement {
   id                  String          @id
+  appTenantId         String
   objectId            String?
   objectDisplayId     String
   objectName          String
@@ -274,8 +276,10 @@ model UtilityStatement {
   finalReportSnapshot Json?
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
+  appTenant           Tenant          @relation(fields: [appTenantId], references: [id], onDelete: Restrict)
   object              PropertyObject? @relation(fields: [objectId], references: [id], onDelete: SetNull)
 
+  @@index([appTenantId])
   @@index([objectId])
   @@index([objectDisplayId])
   @@index([reportYear])

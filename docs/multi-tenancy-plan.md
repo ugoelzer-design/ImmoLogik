@@ -16,7 +16,7 @@ Stand: 17.06.2026
   - `MeterReading` hat `appTenantId`.
   - `ReadingCampaign` hat `appTenantId`.
   - `ReadingAccess` hat `appTenantId`.
-  - `UtilityStatement`
+  - `UtilityStatement` hat `appTenantId`.
 - `AuthGuard` prueft Entra-Bearer-Token und legt User-/Tenant-Kontext am Request ab.
 - `@Public()` Endpunkte existieren fuer Health und Mieter-Ablesungen.
 
@@ -142,8 +142,9 @@ Spaeter:
 6. Mieteinheiten und fachliche Mieter mandantenfaehig machen. Erledigt: Endpunkte nutzen `@CurrentUser()`, Datensaetze tragen `appTenantId`, Objekt-/Einheitsbezug wird gegen den App-Mandanten geprueft.
 7. Vertraege mandantenfaehig machen. Erledigt: Endpunkte nutzen `@CurrentUser()`, Datensaetze tragen `appTenantId`, Objekt-/Mieter-/Einheitsbezug wird gegen den App-Mandanten geprueft.
 8. Zaehler und Ablesekampagnen mandantenfaehig machen. Erledigt: Kampagnen-Endpunkte nutzen `@CurrentUser()`, Zaehlertabellen tragen `appTenantId`, Public-Token-Flows bleiben tokengebunden und intern mandantengefiltert.
-9. Restliche Services nachziehen.
-10. Entra-User-Mapping aktivieren.
+9. Nebenkostenabrechnungen mandantenfaehig machen. Erledigt: Endpunkte nutzen `@CurrentUser()`, Datensaetze tragen `appTenantId`, Workspace/Listen/Freigabe sind mandantengefiltert.
+10. Restliche Services nachziehen.
+11. Entra-User-Mapping aktivieren.
 
 ## Risiken
 
@@ -154,4 +155,4 @@ Spaeter:
 
 ## Empfehlung
 
-Naechster Code-Schritt: Nebenkostenabrechnungen mandantenfaehig machen und verbleibende Fremd-ID-Pruefungen gegen denselben App-Mandanten nachziehen.
+Naechster Code-Schritt: verbleibende mandantenlose Queries pruefen und Entra-User-Mapping haerten.
