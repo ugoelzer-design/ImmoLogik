@@ -7,6 +7,7 @@ import { createTenant, deleteTenant, updateTenant } from "@/features/tenants/ser
 import { SectionCard } from "@/components/ui/section-card";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { tenantSchema } from "@/lib/validation/schemas";
 import type { Contract } from "@/types/contract";
 import type { ImmoDocument } from "@/types/document";
 import type { ImmoObject } from "@/types/object";
@@ -44,17 +45,6 @@ function getTenantVariant(status: string) {
     default:
       return "muted";
   }
-}
-
-function toTenantPayload(form: TenantFormState): TenantInput {
-  return {
-    objectId: form.objectId,
-    rentUnitId: form.rentUnitId,
-    fullName: form.fullName,
-    email: form.email,
-    phone: form.phone,
-    status: form.status,
-  };
 }
 
 function buildTenantDocumentsHref(tenant: Tenant) {
@@ -197,10 +187,6 @@ export function TenantsModule({ tenants: initialTenants, objects, rentUnits, doc
     setSaving(false);
   }
 
-  function isFormValid() {
-    return Object.values(toTenantPayload(form)).every((value) => String(value).trim().length > 0);
-  }
-
   function handleObjectChange(objectId: string) {
     setForm((current) => ({
       ...current,
@@ -210,15 +196,16 @@ export function TenantsModule({ tenants: initialTenants, objects, rentUnits, doc
   }
 
   async function handleSubmit() {
-    if (!isFormValid()) {
-      setError("Bitte alle Felder ausfüllen.");
+    const validation = tenantSchema.safeParse(form);
+    if (!validation.success) {
+      setError(validation.error.issues[0]?.message ?? "Bitte alle Felder korrekt ausfüllen.");
       return;
     }
 
     try {
       setSaving(true);
       setError(null);
-      const payload = toTenantPayload(form);
+      const payload = validation.data;
 
       if (editingId) {
         const updated = await updateTenant(editingId, payload);

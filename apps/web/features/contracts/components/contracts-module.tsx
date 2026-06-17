@@ -6,6 +6,7 @@ import { createContract, deleteContract, updateContract } from "@/features/contr
 import { SectionCard } from "@/components/ui/section-card";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { contractSchema } from "@/lib/validation/schemas";
 import type { Contract, ContractInput, ContractStatus } from "@/types/contract";
 import type { ImmoDocument } from "@/types/document";
 import type { ImmoObject } from "@/types/object";
@@ -43,18 +44,6 @@ function getContractVariant(status: string) {
     default:
       return "muted";
   }
-}
-
-function toContractPayload(form: ContractFormState): ContractInput {
-  return {
-    objectId: form.objectId,
-    tenantId: form.tenantId,
-    rentUnitId: form.rentUnitId,
-    title: form.title,
-    startDate: form.startDate,
-    endDate: form.endDate,
-    status: form.status,
-  };
 }
 
 function buildContractDocumentsHref(contract: Contract) {
@@ -144,10 +133,6 @@ export function ContractsModule({ contracts: initialContracts, objects, tenants,
     setSaving(false);
   }
 
-  function isFormValid() {
-    return Object.values(toContractPayload(form)).every((value) => String(value).trim().length > 0);
-  }
-
   function handleObjectChange(objectId: string) {
     setForm((current) => ({
       ...current,
@@ -158,15 +143,16 @@ export function ContractsModule({ contracts: initialContracts, objects, tenants,
   }
 
   async function handleSubmit() {
-    if (!isFormValid()) {
-      setError("Bitte alle Felder ausfüllen.");
+    const validation = contractSchema.safeParse(form);
+    if (!validation.success) {
+      setError(validation.error.issues[0]?.message ?? "Bitte alle Felder korrekt ausfüllen.");
       return;
     }
 
     try {
       setSaving(true);
       setError(null);
-      const payload = toContractPayload(form);
+      const payload = validation.data;
 
       if (editingId) {
         const updated = await updateContract(editingId, payload);
