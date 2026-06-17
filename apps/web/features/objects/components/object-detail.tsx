@@ -23,7 +23,7 @@ import {
   writeStorageRecord,
 } from "@/features/finances/utils/nebenkosten-storage";
 import type { ImmoDocument } from "@/types/document";
-import type { ReadingCampaign } from "@/types/meter-reading";
+import type { MeterDefinition, ReadingCampaign } from "@/types/meter-reading";
 import type { ImmoObject } from "@/types/object";
 import type { Tenant } from "@/types/tenant";
 import { kostenarten } from "../../shared/kostenarten";
@@ -34,6 +34,7 @@ type ObjectDetailProps = {
   tenants?: Tenant[];
   contracts?: Contract[];
   rentUnits?: RentUnit[];
+  meterDefinitions?: MeterDefinition[];
   readingCampaigns?: ReadingCampaign[];
 };
 
@@ -5660,12 +5661,64 @@ function mergeTenancies(
   ];
 }
 
+function mapMeterDefinitionsToLocalMeters(
+  meterDefinitions: MeterDefinition[],
+): LocalMeter[] {
+  return meterDefinitions.map((meter): LocalMeter => {
+    const type = isMeterTypeValue(meter.type) ? meter.type : "sonstiges";
+    const scope = isMeterScopeValue(meter.scope) ? meter.scope : "apartment";
+    const unit = isMeterUnitValue(meter.unit)
+      ? meter.unit
+      : getDefaultMeterUnit(type) || "Einheiten";
+
+    return {
+      id: meter.id,
+      origin: "optional",
+      standardKey: null,
+      scope,
+      apartmentId: meter.rentUnitId,
+      type,
+      label: meter.label,
+      meterNumber: meter.meterNumber ?? "",
+      unit,
+      readings: meter.readings.map((reading) => ({
+        id: reading.id,
+        date: reading.date.slice(0, 10),
+        value: String(reading.value),
+        reader: reading.reader ?? "",
+      })),
+    };
+  });
+}
+
+function mergeMeters(apiMeters: LocalMeter[], storedMeters: LocalMeter[]) {
+  const knownIds = new Set(apiMeters.map((meter) => meter.id));
+  const knownNumbers = new Set(
+    apiMeters
+      .map((meter) => meter.meterNumber.trim())
+      .filter((meterNumber) => meterNumber !== "")
+      .map(normalizeObjectDetailLookupValue),
+  );
+
+  return [
+    ...apiMeters,
+    ...storedMeters.filter((meter) => {
+      const normalizedNumber = normalizeObjectDetailLookupValue(meter.meterNumber);
+      return (
+        !knownIds.has(meter.id) &&
+        (normalizedNumber === "" || !knownNumbers.has(normalizedNumber))
+      );
+    }),
+  ];
+}
+
 export function ObjectDetail({
   object,
   documents,
   tenants = [],
   contracts = [],
   rentUnits = [],
+  meterDefinitions = [],
   readingCampaigns = [],
 }: ObjectDetailProps) {
   const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
@@ -5724,15 +5777,21 @@ export function ObjectDetail({
   const objectReadingCampaigns = objectKey
     ? readingCampaigns.filter((campaign) => campaign.objectId === objectKey)
     : [];
+  const objectMeterDefinitions = objectKey
+    ? meterDefinitions.filter((meter) => meter.objectId === objectKey)
+    : [];
   const apiApartments = mapRentUnitsToApartments(objectRentUnits);
   const apiTenancies = mapContractsToTenancies(objectContracts, apiApartments);
+  const apiMeters = mapMeterDefinitionsToLocalMeters(objectMeterDefinitions);
   const rawApartments = objectKey
     ? mergeApartments(apiApartments, apartmentsByObject[objectKey] ?? [])
     : [];
   const rawTenancies = objectKey
     ? mergeTenancies(apiTenancies, tenanciesByObject[objectKey] ?? [])
     : [];
-  const rawMeters = objectKey ? metersByObject[objectKey] ?? [] : [];
+  const rawMeters = objectKey
+    ? mergeMeters(apiMeters, metersByObject[objectKey] ?? [])
+    : [];
   const rawUtilities = objectKey ? utilitiesByObject[objectKey] ?? [] : [];
   const documentRequirements = object
     ? buildDocumentRequirements({

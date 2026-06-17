@@ -19,6 +19,46 @@ const STANDARD_APARTMENT_METERS = [
 export class MeterReadingsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findMeters(objectId?: string, appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
+    const meters = await this.prisma.meter.findMany({
+      where: {
+        appTenantId,
+        ...(objectId ? { objectId } : {}),
+      },
+      include: {
+        readings: {
+          orderBy: { readingDate: 'desc' },
+          take: 5,
+        },
+        rentUnit: true,
+      },
+      orderBy: [
+        { objectId: 'asc' },
+        { rentUnitId: 'asc' },
+        { label: 'asc' },
+      ],
+    });
+
+    return meters.map((meter) => ({
+      id: meter.id,
+      objectId: meter.objectId,
+      rentUnitId: meter.rentUnitId,
+      unitLabel: meter.rentUnit?.unitLabel ?? null,
+      scope: meter.scope,
+      type: meter.type,
+      label: meter.label,
+      meterNumber: meter.meterNumber,
+      unit: meter.unit,
+      readings: meter.readings.map((reading) => ({
+        id: reading.id,
+        date: reading.readingDate.toISOString(),
+        value: reading.value,
+        reader: reading.readerName,
+      })),
+    }));
+  }
+
   async findCampaigns(
     objectId?: string,
     pagination: Pick<Prisma.ReadingCampaignFindManyArgs, 'skip' | 'take'> = {},

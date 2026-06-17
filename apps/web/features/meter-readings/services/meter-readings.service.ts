@@ -2,10 +2,17 @@ import { apiClient } from "@/lib/api/client";
 import { apiEndpoints } from "@/lib/api/endpoints";
 import type {
   CreateReadingCampaignInput,
+  MeterDefinition,
   MeterAccess,
   ReadingCampaign,
   SubmitMeterReadingInput,
 } from "@/types/meter-reading";
+
+export async function getMeters(objectId?: string): Promise<MeterDefinition[]> {
+  return apiClient.get<MeterDefinition[]>(apiEndpoints.meterReadings.meters, {
+    query: objectId ? { objectId } : undefined,
+  });
+}
 
 export async function getReadingCampaigns(objectId?: string): Promise<ReadingCampaign[]> {
   return apiClient.get<ReadingCampaign[]>(apiEndpoints.meterReadings.campaigns, {

@@ -8,7 +8,7 @@ import { NewObjectForm } from "@/features/objects/components/new-object-form";
 import type { RentUnit } from "@/features/finances/services/rent-units.service";
 import type { Contract } from "@/types/contract";
 import type { ImmoDocument } from "@/types/document";
-import type { ReadingCampaign } from "@/types/meter-reading";
+import type { MeterDefinition, ReadingCampaign } from "@/types/meter-reading";
 import {
   createObject,
   type CreateObjectInput,
@@ -22,6 +22,7 @@ type ObjectsModuleProps = {
   tenants?: Tenant[];
   contracts?: Contract[];
   rentUnits?: RentUnit[];
+  meters?: MeterDefinition[];
   readingCampaigns?: ReadingCampaign[];
 };
 
@@ -35,6 +36,7 @@ export function ObjectsModule({
   tenants = [],
   contracts = [],
   rentUnits = [],
+  meters = [],
   readingCampaigns = [],
 }: ObjectsModuleProps) {
   const [objects, setObjects] = useState<ImmoObject[]>(
@@ -146,6 +148,7 @@ export function ObjectsModule({
             tenants={tenants}
             contracts={contracts}
             rentUnits={rentUnits}
+            meterDefinitions={meters}
             readingCampaigns={readingCampaigns}
           />
         </div>

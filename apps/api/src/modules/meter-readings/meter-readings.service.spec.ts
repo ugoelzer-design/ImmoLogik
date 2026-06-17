@@ -37,6 +37,45 @@ describe('MeterReadingsService', () => {
     service = new MeterReadingsService(prisma);
   });
 
+  it('lists meters for one app tenant', async () => {
+    prisma.meter.findMany.mockResolvedValue([
+      {
+        id: 'meter-1',
+        objectId: 'object-1',
+        rentUnitId: 'unit-1',
+        scope: 'apartment',
+        type: 'heizung',
+        label: 'Heizung',
+        meterNumber: 'HZ-1',
+        unit: 'kWh',
+        rentUnit: { unitLabel: 'WE 01' },
+        readings: [
+          {
+            id: 'reading-1',
+            readingDate: new Date('2026-01-12T00:00:00.000Z'),
+            value: 123.45,
+            readerName: 'Max Mieter',
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.findMeters('object-1');
+
+    expect(prisma.meter.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { appTenantId: 'tenant-1', objectId: 'object-1' },
+      }),
+    );
+    expect(result[0]).toMatchObject({
+      id: 'meter-1',
+      objectId: 'object-1',
+      rentUnitId: 'unit-1',
+      unitLabel: 'WE 01',
+      readings: [{ id: 'reading-1', value: 123.45, reader: 'Max Mieter' }],
+    });
+  });
+
   it('creates a campaign with recipients for active tenants', async () => {
     prisma.propertyObject.findUnique.mockResolvedValue({
       id: 'object-1',

@@ -27,6 +27,26 @@ export type ReadingCampaign = {
   recipients: ReadingCampaignRecipient[];
 };
 
+export type MeterDefinitionReading = {
+  id: string;
+  date: string;
+  value: number;
+  reader: string | null;
+};
+
+export type MeterDefinition = {
+  id: string;
+  objectId: string;
+  rentUnitId: string | null;
+  unitLabel: string | null;
+  scope: string;
+  type: string;
+  label: string;
+  meterNumber: string | null;
+  unit: string;
+  readings: MeterDefinitionReading[];
+};
+
 export type MeterAccessMeter = {
   id: string;
   type: string;

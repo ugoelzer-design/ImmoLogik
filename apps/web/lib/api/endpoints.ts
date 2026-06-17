@@ -32,6 +32,7 @@ export const apiEndpoints = {
     detail: (id: string) => `/rent-units/${id}`,
   },
   meterReadings: {
+    meters: "/meter-readings/meters",
     campaigns: "/meter-readings/campaigns",
     access: (token: string) => `/meter-readings/access/${token}`,
     submit: (token: string) => `/meter-readings/access/${token}/readings`,

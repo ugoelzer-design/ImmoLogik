@@ -13,6 +13,14 @@ import { Public } from '../../auth/public.decorator';
 export class MeterReadingsController {
   constructor(private readonly meterReadingsService: MeterReadingsService) {}
 
+  @Get('meters')
+  findMeters(
+    @CurrentUser() user: AuthenticatedUser | undefined,
+    @Query('objectId') objectId?: string,
+  ) {
+    return this.meterReadingsService.findMeters(objectId, user?.appTenantSlug);
+  }
+
   @Get('campaigns')
   findCampaigns(
     @CurrentUser() user: AuthenticatedUser | undefined,
