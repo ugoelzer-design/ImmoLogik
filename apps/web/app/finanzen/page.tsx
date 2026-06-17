@@ -46,9 +46,14 @@ export default function FinanzenPage() {
 
   return (
     <section id="finanzen-start" className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Finanzen</h1>
-        <p className="mt-1 text-sm text-zinc-600">Kaufmännischer Überblick und Bereichseinstieg je WEG.</p>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Finanzen</h1>
+          <p className="mt-1 text-sm text-zinc-600">Kaufmännischer Überblick und Bereichseinstieg je WEG.</p>
+        </div>
+        <a href="/dashboard" className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-900">
+          ← Zurück zum Dashboard
+        </a>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[260px_minmax(0,1fr)]">
@@ -78,7 +83,6 @@ export default function FinanzenPage() {
                   {nebenkostenTabs.map((tab) => (
                     <SubNavButton key={tab.id} label={tab.label} active={tab.id === activeNebenkostenTab} onClick={() => setActiveNebenkostenTab(tab.id)} />
                   ))}
-                  <a href="/dashboard" className="inline-flex h-[42px] items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition hover:border-zinc-300 hover:bg-zinc-50 sm:ml-auto">← Zum Dashboard</a>
                 </div>
               </section>
               {activeNebenkostenTab === "uebersicht" ? <NebenkostenOverview /> : null}

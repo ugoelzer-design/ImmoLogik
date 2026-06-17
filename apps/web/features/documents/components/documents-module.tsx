@@ -1079,6 +1079,12 @@ export function DocumentsModule({ initialDocuments, objects, rentUnits, initialF
           ) : null}
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
+          <a
+            href="/dashboard"
+            className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-900"
+          >
+            ← Zurück zum Dashboard
+          </a>
           <button
             type="button"
             onClick={handleExportInventory}
