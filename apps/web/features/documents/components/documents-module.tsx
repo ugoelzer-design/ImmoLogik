@@ -15,6 +15,7 @@ import {
   updateDocumentStatus,
   updateDocumentMetadata,
 } from "@/features/documents/services/documents.service";
+import { documentUploadSchema } from "@/lib/validation/schemas";
 
 const CATEGORIES = ["Sonstiges", "Jahresreport WEG", "Jahresreport Wohnung", "Mietvertrag", "Nebenkostenabrechnung", "Protokoll", "Rechnung", "Foto", "Versicherung", "Ausweis", "Sonstige Korrespondenz"];
 const STATUSES = ["Vorhanden", "In Prüfung", "Fehlt"];
@@ -25,6 +26,25 @@ function requiresReportYear(category: string) {
     category === "Jahresreport Wohnung" ||
     category === "Nebenkostenabrechnung"
   );
+}
+
+function getDocumentValidationMessage(
+  issue: { path: Array<string | number>; message: string } | undefined,
+  titleMessage: string,
+) {
+  if (!issue) {
+    return "Bitte alle Felder korrekt ausfüllen.";
+  }
+
+  if (issue.path[0] === "title") {
+    return titleMessage;
+  }
+
+  if (issue.path[0] === "reportYear") {
+    return "Für Jahresreports und Nebenkostenabrechnungen bitte ein gültiges 4-stelliges Berichtsjahr angeben.";
+  }
+
+  return issue.message;
 }
 
 function formatBytes(bytes: number) {
@@ -811,18 +831,23 @@ export function DocumentsModule({ initialDocuments, objects, rentUnits, initialF
     setActionError(null);
   }
 
-  function validateDocumentDraft() {
-    const uploadNeedsReportYear = requiresReportYear(uploadForm.category);
-    const trimmedReportYear = uploadForm.reportYear.trim();
+  function validateDocumentDraft(titleFallback = "", titleMessage = "Bitte einen Dokumenttitel angeben.") {
+    const validation = documentUploadSchema.safeParse({
+      title: uploadForm.title.trim() || titleFallback,
+      category: uploadForm.category,
+      objectId: uploadForm.objectId || undefined,
+      rentUnitId: uploadForm.rentUnitId || undefined,
+      reportYear: uploadForm.reportYear.trim() || undefined,
+    });
 
-    if (uploadNeedsReportYear && !/^\d{4}$/.test(trimmedReportYear)) {
-      setUploadError("Für Jahresreports und Nebenkostenabrechnungen bitte ein gültiges 4-stelliges Berichtsjahr angeben.");
+    if (!validation.success) {
+      setUploadError(getDocumentValidationMessage(validation.error.issues[0], titleMessage));
       return null;
     }
 
     return {
-      trimmedTitle: uploadForm.title.trim(),
-      trimmedReportYear,
+      trimmedTitle: validation.data.title,
+      trimmedReportYear: validation.data.reportYear ?? "",
       trimmedUploadedBy: uploadForm.uploadedBy.trim(),
     };
   }
@@ -847,7 +872,7 @@ export function DocumentsModule({ initialDocuments, objects, rentUnits, initialF
       return;
     }
 
-    const validatedDraft = validateDocumentDraft();
+    const validatedDraft = validateDocumentDraft(uploadForm.file.name);
     if (!validatedDraft) {
       return;
     }
@@ -881,13 +906,8 @@ export function DocumentsModule({ initialDocuments, objects, rentUnits, initialF
   }
 
   async function handleCreateMissing() {
-    const validatedDraft = validateDocumentDraft();
+    const validatedDraft = validateDocumentDraft("", "Für fehlende Dokumente bitte einen Titel angeben.");
     if (!validatedDraft) {
-      return;
-    }
-
-    if (!validatedDraft.trimmedTitle) {
-      setUploadError("Für fehlende Dokumente bitte einen Titel angeben.");
       return;
     }
 
@@ -974,17 +994,16 @@ export function DocumentsModule({ initialDocuments, objects, rentUnits, initialF
       return;
     }
 
-    const trimmedTitle = editForm.title.trim();
-    const trimmedReportYear = editForm.reportYear.trim();
-    const metadataNeedsReportYear = requiresReportYear(editForm.category);
+    const validation = documentUploadSchema.safeParse({
+      title: editForm.title,
+      category: editForm.category,
+      objectId: editForm.objectId || undefined,
+      rentUnitId: editForm.rentUnitId || undefined,
+      reportYear: editForm.reportYear.trim() || undefined,
+    });
 
-    if (!trimmedTitle) {
-      setEditError("Bitte einen Dokumenttitel angeben.");
-      return;
-    }
-
-    if (metadataNeedsReportYear && !/^\d{4}$/.test(trimmedReportYear)) {
-      setEditError("Für Jahresreports und Nebenkostenabrechnungen bitte ein gültiges 4-stelliges Berichtsjahr angeben.");
+    if (!validation.success) {
+      setEditError(getDocumentValidationMessage(validation.error.issues[0], "Bitte einen Dokumenttitel angeben."));
       return;
     }
 
@@ -992,12 +1011,12 @@ export function DocumentsModule({ initialDocuments, objects, rentUnits, initialF
     setEditError(null);
     setActionError(null);
     const updated = await updateDocumentMetadata(editForm.id, {
-      title: trimmedTitle,
-      category: editForm.category,
-      uploadedBy: editForm.uploadedBy,
-      objectId: editForm.objectId || undefined,
-      rentUnitId: editForm.rentUnitId || undefined,
-      reportYear: trimmedReportYear,
+      title: validation.data.title,
+      category: validation.data.category,
+      uploadedBy: editForm.uploadedBy.trim(),
+      objectId: validation.data.objectId || undefined,
+      rentUnitId: validation.data.rentUnitId || undefined,
+      reportYear: validation.data.reportYear ?? "",
     });
 
     if (updated.ok) {
