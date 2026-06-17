@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import sharp from 'sharp';
 import { DocumentsService } from './documents.service';
 
 describe('DocumentsService', () => {
@@ -314,6 +315,64 @@ describe('DocumentsService', () => {
     );
     expect(prisma.document.create).toHaveBeenCalled();
     expect(result.downloadUrl).toBe('https://download.test/uploaded');
+
+    jest.restoreAllMocks();
+  });
+
+  it('compresses image uploads before storing them', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(1710000000004);
+    minio.getPresignedUrl.mockResolvedValueOnce(
+      'https://download.test/photo',
+    );
+    prisma.document.create.mockImplementationOnce(async ({ data }) => ({
+      id: 'doc-photo',
+      ...data,
+      objectName: null,
+      unitLabel: null,
+      createdAt: new Date('2026-03-22T12:00:00.000Z'),
+      updatedAt: new Date('2026-03-22T12:00:00.000Z'),
+    }));
+
+    const originalBuffer = await sharp({
+      create: {
+        width: 3200,
+        height: 1800,
+        channels: 3,
+        background: '#d97706',
+      },
+    })
+      .jpeg({ quality: 100 })
+      .toBuffer();
+    const file = {
+      originalname: 'foto.jpg',
+      mimetype: 'image/jpeg',
+      size: originalBuffer.length,
+      buffer: originalBuffer,
+    } as Express.Multer.File;
+
+    await service.upload(
+      file,
+      undefined,
+      undefined,
+      undefined,
+      'Foto',
+      'Foto',
+      undefined,
+    );
+
+    const storedBuffer = minio.uploadFile.mock.calls[0][1] as Buffer;
+    const storedMetadata = await sharp(storedBuffer).metadata();
+
+    expect(storedBuffer).not.toBe(originalBuffer);
+    expect(storedMetadata.width).toBeLessThanOrEqual(2000);
+    expect(prisma.document.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          mimeType: 'image/jpeg',
+          size: storedBuffer.length,
+        }),
+      }),
+    );
 
     jest.restoreAllMocks();
   });

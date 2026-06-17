@@ -7,11 +7,16 @@ import {
 import { StreamableFile } from '@nestjs/common';
 import { Prisma, type Document } from '@prisma/client';
 import * as path from 'path';
+import sharp from 'sharp';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MinioService } from './minio.service';
 
 const DOCUMENT_STATUSES = ['Vorhanden', 'In Prüfung', 'Fehlt'] as const;
 const INVALID_STORAGE_NAME_CHARS = '<>:"/\\|?*';
+const COMPRESSIBLE_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png'] as const;
+const IMAGE_MAX_EDGE_PX = 2000;
+const IMAGE_JPEG_QUALITY = 82;
+const IMAGE_PNG_QUALITY = 82;
 
 type FindAllFilters = {
   objectId?: string;
@@ -51,6 +56,12 @@ type CreateMissingInput = {
   category?: string;
   title?: string;
   uploadedBy?: string;
+};
+
+type PreparedUploadFile = {
+  buffer: Buffer;
+  mimeType: string;
+  size: number;
 };
 
 type DuplicateCheckInput = {
@@ -310,13 +321,19 @@ export class DocumentsService {
       normalizedCategory,
       `${timestamp}_${safeName}`,
     );
+    const preparedFile = await this.prepareUploadFile(file);
 
-    await this.minio.uploadFile(storageKey, file.buffer, file.mimetype, {
-      'x-category': normalizedCategory,
-      'x-object-id': relationMeta.objectId || '',
-      'x-rent-unit-id': relationMeta.rentUnitId || '',
-      'x-report-year': parsedReportYear ? String(parsedReportYear) : '',
-    });
+    await this.minio.uploadFile(
+      storageKey,
+      preparedFile.buffer,
+      preparedFile.mimeType,
+      {
+        'x-category': normalizedCategory,
+        'x-object-id': relationMeta.objectId || '',
+        'x-rent-unit-id': relationMeta.rentUnitId || '',
+        'x-report-year': parsedReportYear ? String(parsedReportYear) : '',
+      },
+    );
 
     let doc: Document;
     try {
@@ -324,8 +341,8 @@ export class DocumentsService {
         data: {
           title: normalizedTitle,
           fileName: file.originalname,
-          mimeType: file.mimetype,
-          size: file.size,
+          mimeType: preparedFile.mimeType,
+          size: preparedFile.size,
           storageKey,
           objectId: relationMeta.objectId,
           objectName: relationMeta.objectName,
@@ -438,13 +455,19 @@ export class DocumentsService {
     );
     const normalizedUploadedBy = uploadedBy?.trim() || doc.uploadedBy || null;
     const previousFileExists = await this.minio.fileExists(doc.storageKey);
+    const preparedFile = await this.prepareUploadFile(file);
 
-    await this.minio.uploadFile(nextStorageKey, file.buffer, file.mimetype, {
-      'x-category': doc.category || 'Sonstiges',
-      'x-object-id': relationMeta.objectId || '',
-      'x-rent-unit-id': relationMeta.rentUnitId || '',
-      'x-report-year': doc.reportYear ? String(doc.reportYear) : '',
-    });
+    await this.minio.uploadFile(
+      nextStorageKey,
+      preparedFile.buffer,
+      preparedFile.mimeType,
+      {
+        'x-category': doc.category || 'Sonstiges',
+        'x-object-id': relationMeta.objectId || '',
+        'x-rent-unit-id': relationMeta.rentUnitId || '',
+        'x-report-year': doc.reportYear ? String(doc.reportYear) : '',
+      },
+    );
 
     let updated: Document;
     try {
@@ -452,8 +475,8 @@ export class DocumentsService {
         where: { id },
         data: {
           fileName: file.originalname,
-          mimeType: file.mimetype,
-          size: file.size,
+          mimeType: preparedFile.mimeType,
+          size: preparedFile.size,
           storageKey: nextStorageKey,
           uploadedBy: normalizedUploadedBy,
           status: 'Vorhanden',
@@ -482,6 +505,55 @@ export class DocumentsService {
     }
 
     return this.mapWithUrl(updated);
+  }
+
+  private async prepareUploadFile(
+    file: Express.Multer.File,
+  ): Promise<PreparedUploadFile> {
+    if (
+      !COMPRESSIBLE_IMAGE_MIME_TYPES.includes(
+        file.mimetype as (typeof COMPRESSIBLE_IMAGE_MIME_TYPES)[number],
+      )
+    ) {
+      return {
+        buffer: file.buffer,
+        mimeType: file.mimetype,
+        size: file.size,
+      };
+    }
+
+    try {
+      const image = sharp(file.buffer).rotate().resize({
+        width: IMAGE_MAX_EDGE_PX,
+        height: IMAGE_MAX_EDGE_PX,
+        fit: 'inside',
+        withoutEnlargement: true,
+      });
+      const buffer =
+        file.mimetype === 'image/png'
+          ? await image
+              .png({ quality: IMAGE_PNG_QUALITY, compressionLevel: 9 })
+              .toBuffer()
+          : await image
+              .jpeg({ quality: IMAGE_JPEG_QUALITY, mozjpeg: true })
+              .toBuffer();
+
+      return {
+        buffer,
+        mimeType: file.mimetype,
+        size: buffer.length,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Bildkomprimierung fehlgeschlagen, Original wird gespeichert: ${error}`,
+      );
+
+      return {
+        buffer: file.buffer,
+        mimeType: file.mimetype,
+        size: file.size,
+      };
+    }
   }
 
   private async resolveDocumentRelations(
