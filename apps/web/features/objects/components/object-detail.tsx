@@ -1165,17 +1165,6 @@ function isOptionalPlaceholderUtility(utility: LocalUtility) {
   );
 }
 
-function createInitialUtilitiesForObject(objectKey: string): LocalUtility[] {
-  return STANDARD_UTILITY_CATEGORY_OPTIONS.map((option, index) => ({
-    id: formatUtilityInternalId(objectKey, index + 1),
-    category: option.value,
-    label: option.label,
-    apartmentIds: [],
-    meterIds: [],
-    note: "",
-  }));
-}
-
 function getSortedMeterReadings(readings: LocalMeterReading[]) {
   return [...readings].sort((left, right) => {
     const dateCompare = right.date.localeCompare(left.date);
@@ -5913,24 +5902,6 @@ export function ObjectDetail({
 
     setCreatingRequirementKey(null);
   }
-
-  useEffect(() => {
-    if (!hasLoadedStorage || objectKey === "") {
-      return;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(utilitiesByObject, objectKey)) {
-      return;
-    }
-
-    const nextUtilitiesRecord = {
-      ...utilitiesByObject,
-      [objectKey]: createInitialUtilitiesForObject(objectKey),
-    };
-
-    setUtilitiesByObject(nextUtilitiesRecord);
-    writeStorageRecord(OBJECT_MODULE_STORAGE_KEYS.utilities, nextUtilitiesRecord);
-  }, [hasLoadedStorage, objectKey, utilitiesByObject]);
 
   const {
     apartments,
