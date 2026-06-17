@@ -821,6 +821,10 @@ function formatDateForDisplay(dateValue: string) {
   return new Intl.DateTimeFormat("de-DE").format(parsedDate);
 }
 
+function normalizeObjectDetailLookupValue(value: string) {
+  return value.trim().toLocaleLowerCase("de-DE");
+}
+
 function getMeterTypeLabel(type: MeterTypeValue) {
   return METER_TYPE_OPTIONS.find((option) => option.value === type)?.label ?? type;
 }
@@ -5571,6 +5575,91 @@ function normalizeObjectDetailState(
   };
 }
 
+function mapRentUnitsToApartments(rentUnits: RentUnit[]): LocalApartment[] {
+  return rentUnits
+    .map((rentUnit): LocalApartment => ({
+      id: rentUnit.id,
+      unitLabel: rentUnit.unitLabel,
+      designation: rentUnit.unitLabel,
+      area: "0",
+      status: rentUnit.tenant.trim() === "" ? "frei" : "vermietet",
+    }))
+    .sort((left, right) =>
+      left.unitLabel.localeCompare(right.unitLabel, "de", {
+        numeric: true,
+        sensitivity: "base",
+      }),
+    );
+}
+
+function mapContractsToTenancies(
+  contracts: Contract[],
+  apartments: LocalApartment[],
+): LocalTenancy[] {
+  const apartmentIds = new Set(apartments.map((apartment) => apartment.id));
+
+  return contracts
+    .filter((contract) => {
+      return (
+        contract.rentUnitId != null &&
+        apartmentIds.has(contract.rentUnitId) &&
+        isValidDateInputValue(contract.startDate) &&
+        (contract.endDate.trim() === "" || isValidDateInputValue(contract.endDate))
+      );
+    })
+    .map((contract): LocalTenancy => ({
+      id: contract.id,
+      apartmentId: contract.rentUnitId ?? "",
+      tenantName: contract.tenantName,
+      startDate: contract.startDate,
+      endDate: contract.status === "Aktiv" ? "" : contract.endDate,
+      persons: "1",
+    }));
+}
+
+function mergeApartments(
+  apiApartments: LocalApartment[],
+  storedApartments: LocalApartment[],
+) {
+  const knownIds = new Set(apiApartments.map((apartment) => apartment.id));
+  const knownLabels = new Set(
+    apiApartments.map((apartment) =>
+      normalizeObjectDetailLookupValue(apartment.unitLabel),
+    ),
+  );
+
+  return [
+    ...apiApartments,
+    ...storedApartments.filter((apartment) => {
+      return (
+        !knownIds.has(apartment.id) &&
+        !knownLabels.has(normalizeObjectDetailLookupValue(apartment.unitLabel))
+      );
+    }),
+  ];
+}
+
+function mergeTenancies(
+  apiTenancies: LocalTenancy[],
+  storedTenancies: LocalTenancy[],
+) {
+  const knownIds = new Set(apiTenancies.map((tenancy) => tenancy.id));
+  const knownFingerprints = new Set(
+    apiTenancies.map(
+      (tenancy) =>
+        `${tenancy.apartmentId}|${normalizeObjectDetailLookupValue(tenancy.tenantName)}|${tenancy.startDate}`,
+    ),
+  );
+
+  return [
+    ...apiTenancies,
+    ...storedTenancies.filter((tenancy) => {
+      const fingerprint = `${tenancy.apartmentId}|${normalizeObjectDetailLookupValue(tenancy.tenantName)}|${tenancy.startDate}`;
+      return !knownIds.has(tenancy.id) && !knownFingerprints.has(fingerprint);
+    }),
+  ];
+}
+
 export function ObjectDetail({
   object,
   documents,
@@ -5619,10 +5708,6 @@ export function ObjectDetail({
   }, []);
 
   const objectKey = object ? String(object.id) : "";
-  const rawApartments = objectKey ? apartmentsByObject[objectKey] ?? [] : [];
-  const rawTenancies = objectKey ? tenanciesByObject[objectKey] ?? [] : [];
-  const rawMeters = objectKey ? metersByObject[objectKey] ?? [] : [];
-  const rawUtilities = objectKey ? utilitiesByObject[objectKey] ?? [] : [];
   const allDocuments = [...documents, ...createdMissingDocuments];
   const objectDocuments = objectKey
     ? allDocuments.filter((document) => document.objectId === objectKey)
@@ -5639,6 +5724,16 @@ export function ObjectDetail({
   const objectReadingCampaigns = objectKey
     ? readingCampaigns.filter((campaign) => campaign.objectId === objectKey)
     : [];
+  const apiApartments = mapRentUnitsToApartments(objectRentUnits);
+  const apiTenancies = mapContractsToTenancies(objectContracts, apiApartments);
+  const rawApartments = objectKey
+    ? mergeApartments(apiApartments, apartmentsByObject[objectKey] ?? [])
+    : [];
+  const rawTenancies = objectKey
+    ? mergeTenancies(apiTenancies, tenanciesByObject[objectKey] ?? [])
+    : [];
+  const rawMeters = objectKey ? metersByObject[objectKey] ?? [] : [];
+  const rawUtilities = objectKey ? utilitiesByObject[objectKey] ?? [] : [];
   const documentRequirements = object
     ? buildDocumentRequirements({
         object,
