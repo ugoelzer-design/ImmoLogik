@@ -25,11 +25,9 @@ import {
   parseDecimalString,
 } from "../utils/nebenkosten-calc";
 import {
-  NEBENKOSTEN_STORAGE_KEYS,
   OBJECT_MODULE_STORAGE_KEYS,
   isFinalReportFreigegeben,
   readStorageRecord,
-  readStorageValue,
 } from "../utils/nebenkosten-storage";
 import { beispielAbrechnungen } from "../data/nebenkosten";
 import { kostenarten } from "../../shared/kostenarten";
@@ -2123,7 +2121,7 @@ export function NebenkostenAbrechnungen({ documents }: NebenkostenAbrechnungenPr
         }
       } catch {
         if (!isCancelled) {
-          setWorkspaceSyncError("Nebenkosten-Arbeitsstand konnte nicht aus der API geladen werden. Lokaler Stand wird verwendet.");
+          setWorkspaceSyncError("Nebenkosten-Arbeitsstand konnte nicht aus der API geladen werden.");
         }
       }
 
@@ -2131,36 +2129,7 @@ export function NebenkostenAbrechnungen({ documents }: NebenkostenAbrechnungenPr
         return;
       }
 
-      const gespeicherteAbrechnungen = readStorageValue<NebenkostenAbrechnung[] | null>(
-        NEBENKOSTEN_STORAGE_KEYS.abrechnungen,
-        null,
-      );
-      const gespeichertePositionen = readStorageValue<
-        Record<string, AbrechnungsPosition[]> | null
-      >(NEBENKOSTEN_STORAGE_KEYS.positionen, null);
-      const gespeicherteEinheiten = readStorageValue<
-        Record<string, Abrechnungseinheit[]> | null
-      >(NEBENKOSTEN_STORAGE_KEYS.einheiten, null);
-      const gespeicherteFinalReports = readStorageValue<
-        Record<string, FinalReportSnapshot> | null
-      >(NEBENKOSTEN_STORAGE_KEYS.finalReports, null);
-
-      const bereinigteAbrechnungen = Array.isArray(gespeicherteAbrechnungen)
-        ? gespeicherteAbrechnungen
-        : [];
-
-      applyPersistedWorkspace(
-        bereinigteAbrechnungen,
-        gespeichertePositionen && typeof gespeichertePositionen === "object"
-          ? gespeichertePositionen
-          : {},
-        gespeicherteEinheiten && typeof gespeicherteEinheiten === "object"
-          ? gespeicherteEinheiten
-          : {},
-        gespeicherteFinalReports && typeof gespeicherteFinalReports === "object"
-          ? gespeicherteFinalReports
-          : {},
-      );
+      applyPersistedWorkspace([], {}, {}, {});
       setHasLoadedNebenkostenStorage(true);
     }
 
