@@ -1,5 +1,5 @@
+import { MiddlewareConsumer, Module } from '@nestjs/common';
 import { RentUnitsModule } from './modules/rent-units/rent-units.module';
-import { Module } from '@nestjs/common';
 import { PrismaModule } from './prisma/prisma.module';
 import { ObjectsModule } from './modules/objects/objects.module';
 import { DocumentsModule } from './modules/documents/documents.module';
@@ -8,6 +8,7 @@ import { ContractsModule } from './modules/contracts/contracts.module';
 import { MeterReadingsModule } from './modules/meter-readings/meter-readings.module';
 import { UtilityStatementsModule } from './modules/utility-statements/utility-statements.module';
 import { AuthModule } from './auth/auth.module';
+import { RequestLoggingMiddleware } from './common/request-logging.middleware';
 
 @Module({
   imports: [
@@ -22,4 +23,8 @@ import { AuthModule } from './auth/auth.module';
     UtilityStatementsModule,
   ],
 })
-export class AppModule {}
+export class AppModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestLoggingMiddleware).forRoutes('*');
+  }
+}
