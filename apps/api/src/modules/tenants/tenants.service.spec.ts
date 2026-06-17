@@ -5,6 +5,9 @@ import { TenantsService } from './tenants.service';
 describe('TenantsService', () => {
   let service: TenantsService;
   let prisma: {
+    tenant: {
+      findUnique: jest.Mock;
+    };
     mieter: {
       findMany: jest.Mock;
       findUnique: jest.Mock;
@@ -19,6 +22,9 @@ describe('TenantsService', () => {
 
   beforeEach(() => {
     prisma = {
+      tenant: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'tenant-1' }),
+      },
       mieter: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
@@ -38,6 +44,7 @@ describe('TenantsService', () => {
     prisma.mieter.findMany.mockResolvedValueOnce([
       {
         id: 't-1',
+        appTenantId: 'tenant-1',
         objectId: 'obj-1',
         rentUnitId: 'ru-1',
         fullName: 'Anna',
@@ -72,7 +79,9 @@ describe('TenantsService', () => {
   it('rejects tenants when the selected unit does not belong to the object', async () => {
     prisma.rentUnit.findUnique.mockResolvedValueOnce({
       id: 'ru-1',
+      appTenantId: 'tenant-1',
       objectId: 'obj-2',
+      object: { appTenantId: 'tenant-1' },
     });
 
     await expect(
@@ -90,11 +99,14 @@ describe('TenantsService', () => {
   it('persists relation ids and display status values on create', async () => {
     prisma.rentUnit.findUnique.mockResolvedValueOnce({
       id: 'ru-1',
+      appTenantId: 'tenant-1',
       objectId: 'obj-1',
+      object: { appTenantId: 'tenant-1' },
     });
     prisma.mieter.create.mockResolvedValueOnce({
-      id: 't-3',
-      objectId: 'obj-1',
+        id: 't-3',
+        appTenantId: 'tenant-1',
+        objectId: 'obj-1',
       rentUnitId: 'ru-1',
       fullName: 'Carla',
       email: 'carla@example.com',
@@ -134,6 +146,7 @@ describe('TenantsService', () => {
   it('updates tenants and normalizes the returned status', async () => {
     prisma.mieter.findUnique.mockResolvedValueOnce({
       id: 't-4',
+      appTenantId: 'tenant-1',
       objectId: 'obj-1',
       rentUnitId: 'ru-1',
       fullName: 'Dora',
@@ -145,10 +158,13 @@ describe('TenantsService', () => {
     });
     prisma.rentUnit.findUnique.mockResolvedValueOnce({
       id: 'ru-1',
+      appTenantId: 'tenant-1',
       objectId: 'obj-1',
+      object: { appTenantId: 'tenant-1' },
     });
     prisma.mieter.update.mockResolvedValueOnce({
       id: 't-4',
+      appTenantId: 'tenant-1',
       objectId: 'obj-1',
       rentUnitId: 'ru-1',
       fullName: 'Dora',
@@ -175,6 +191,7 @@ describe('TenantsService', () => {
   it('prevents deleting tenants with linked contracts', async () => {
     prisma.mieter.findUnique.mockResolvedValueOnce({
       id: 't-5',
+      appTenantId: 'tenant-1',
       _count: {
         vertraege: 1,
       },

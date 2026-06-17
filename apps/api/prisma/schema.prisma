@@ -17,6 +17,8 @@ model Tenant {
   users           User[]
   propertyObjects PropertyObject[]
   documents       Document[]
+  rentUnits       RentUnit[]
+  mieter          Mieter[]
 }
 
 model User {
@@ -88,6 +90,7 @@ model Document {
 
 model RentUnit {
   id             String         @id @default(cuid())
+  appTenantId    String
   objectId       String
   unitLabel      String
   tenant         String
@@ -97,18 +100,21 @@ model RentUnit {
   faelligAm      String
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
+  appTenant      Tenant         @relation(fields: [appTenantId], references: [id], onDelete: Restrict)
   object         PropertyObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
   mieter         Mieter[]
   vertraege      Vertrag[]
   meters         Meter[]
   readingAccess  ReadingAccess[]
 
+  @@index([appTenantId])
   @@index([objectId])
   @@map("rent_units")
 }
 
 model Mieter {
   id         String         @id @default(cuid())
+  appTenantId String
   objectId   String
   rentUnitId String
   fullName   String
@@ -117,11 +123,13 @@ model Mieter {
   status     String         @default("Aktiv")
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
+  appTenant  Tenant         @relation(fields: [appTenantId], references: [id], onDelete: Restrict)
   object     PropertyObject @relation(fields: [objectId], references: [id], onDelete: Restrict)
   rentUnit   RentUnit       @relation(fields: [rentUnitId], references: [id], onDelete: Restrict)
   vertraege  Vertrag[]
   readingAccess ReadingAccess[]
 
+  @@index([appTenantId])
   @@index([objectId])
   @@index([rentUnitId])
   @@unique([objectId, rentUnitId])

@@ -11,29 +11,43 @@ import type { Prisma } from '@prisma/client';
 export class RentUnitsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll(pagination: Pick<Prisma.RentUnitFindManyArgs, 'skip' | 'take'> = {}) {
+  async findAll(
+    pagination: Pick<Prisma.RentUnitFindManyArgs, 'skip' | 'take'> = {},
+    appTenantSlug = 'default',
+  ) {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
+
     return this.prisma.rentUnit.findMany({
       ...pagination,
+      where: { appTenantId },
       orderBy: { createdAt: 'asc' },
     });
   }
 
-  findByObject(objectId: string) {
+  async findByObject(objectId: string, appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
+
     return this.prisma.rentUnit.findMany({
-      where: { objectId },
+      where: { objectId, appTenantId },
       orderBy: { unitLabel: 'asc' },
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const unit = await this.prisma.rentUnit.findUnique({ where: { id } });
-    if (!unit) throw new NotFoundException('Mieteinheit nicht gefunden.');
+    if (!unit || unit.appTenantId !== appTenantId)
+      throw new NotFoundException('Mieteinheit nicht gefunden.');
     return unit;
   }
 
-  create(dto: CreateRentUnitDto) {
+  async create(dto: CreateRentUnitDto, appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
+    await this.assertObjectBelongsToAppTenant(dto.objectId, appTenantId);
+
     return this.prisma.rentUnit.create({
       data: {
+        appTenantId,
         ...dto,
         istMiete: dto.istMiete ?? 0,
         zahlungsStatus: dto.zahlungsStatus ?? 'Offen',
@@ -41,12 +55,22 @@ export class RentUnitsService {
     });
   }
 
-  async update(id: string, dto: Partial<CreateRentUnitDto>) {
-    await this.findOne(id);
+  async update(
+    id: string,
+    dto: Partial<CreateRentUnitDto>,
+    appTenantSlug = 'default',
+  ) {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
+    await this.findOne(id, appTenantSlug);
+    if (dto.objectId !== undefined) {
+      await this.assertObjectBelongsToAppTenant(dto.objectId, appTenantId);
+    }
+
     return this.prisma.rentUnit.update({ where: { id }, data: dto });
   }
 
-  async remove(id: string) {
+  async remove(id: string, appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const unit = await this.prisma.rentUnit.findUnique({
       where: { id },
       include: {
@@ -59,7 +83,7 @@ export class RentUnitsService {
       },
     });
 
-    if (!unit) {
+    if (!unit || unit.appTenantId !== appTenantId) {
       throw new NotFoundException('Mieteinheit nicht gefunden.');
     }
 
@@ -70,5 +94,32 @@ export class RentUnitsService {
     }
 
     return this.prisma.rentUnit.delete({ where: { id } });
+  }
+
+  private async assertObjectBelongsToAppTenant(
+    objectId: string,
+    appTenantId: string,
+  ) {
+    const object = await this.prisma.propertyObject.findUnique({
+      where: { id: objectId },
+      select: { id: true, appTenantId: true },
+    });
+
+    if (!object || object.appTenantId !== appTenantId) {
+      throw new BadRequestException('Objekt nicht gefunden.');
+    }
+  }
+
+  private async resolveAppTenantId(appTenantSlug: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug: appTenantSlug },
+      select: { id: true },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Mandant nicht gefunden.');
+    }
+
+    return tenant.id;
   }
 }

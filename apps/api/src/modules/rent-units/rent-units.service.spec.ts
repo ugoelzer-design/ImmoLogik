@@ -4,6 +4,12 @@ import { RentUnitsService } from './rent-units.service';
 describe('RentUnitsService', () => {
   let service: RentUnitsService;
   let prisma: {
+    tenant: {
+      findUnique: jest.Mock;
+    };
+    propertyObject: {
+      findUnique: jest.Mock;
+    };
     rentUnit: {
       findMany: jest.Mock;
       findUnique: jest.Mock;
@@ -15,6 +21,15 @@ describe('RentUnitsService', () => {
 
   beforeEach(() => {
     prisma = {
+      tenant: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'tenant-1' }),
+      },
+      propertyObject: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'obj-1',
+          appTenantId: 'tenant-1',
+        }),
+      },
       rentUnit: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
@@ -40,6 +55,7 @@ describe('RentUnitsService', () => {
 
     expect(prisma.rentUnit.create).toHaveBeenCalledWith({
       data: {
+        appTenantId: 'tenant-1',
         objectId: 'obj-1',
         unitLabel: 'WE 01',
         tenant: 'Anna',
@@ -62,6 +78,7 @@ describe('RentUnitsService', () => {
   it('prevents deleting rent units with dependent tenants or contracts', async () => {
     prisma.rentUnit.findUnique.mockResolvedValueOnce({
       id: 'ru-1',
+      appTenantId: 'tenant-1',
       _count: {
         mieter: 1,
         vertraege: 0,

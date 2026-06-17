@@ -88,6 +88,7 @@ async function main() {
     if (!existing) {
       await prisma.rentUnit.create({
         data: {
+          appTenantId: object.appTenantId,
           objectId: object.id,
           unitLabel: unit.unitLabel,
           tenant: unit.tenant,
@@ -134,6 +135,7 @@ async function main() {
     if (!existing) {
       await prisma.mieter.create({
         data: {
+          appTenantId: object.appTenantId,
           objectId: object.id,
           rentUnitId: rentUnit.id,
           fullName: tenant.fullName,
