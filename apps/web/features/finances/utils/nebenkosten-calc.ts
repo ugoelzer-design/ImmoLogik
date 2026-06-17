@@ -34,22 +34,6 @@ export function areSerializedValuesEqual(left: unknown, right: unknown) {
 
 // ─── Objekt-Identifier-Erkennung ──────────────────────────────────────────────
 
-const LEGACY_MOCK_OBJECT_VALUES = [
-  "haus hafencity",
-  "haus mainufer",
-  "hochhaus rheinblick",
-  "am sandtorkai 12, 20457 hamburg",
-  "untermainkai 8, 60329 frankfurt am main",
-  "rheinuferstraße 21, 50678 köln",
-  "rheinuferstrasse 21, 50678 köln",
-  "rheinuferstrasse 21, 50678 koln",
-];
-
-export function isLegacyMockObjectValue(value: string) {
-  const normalized = normalizeLookupValue(value);
-  return normalized !== "" && LEGACY_MOCK_OBJECT_VALUES.includes(normalized);
-}
-
 export function isTechnicalIdentifier(value: string) {
   const normalized = String(value ?? "").trim();
   if (normalized === "") return false;
@@ -138,9 +122,7 @@ export function createObjectReferencesFromService(items: unknown): LocalObjectRe
     if (
       id === "" ||
       displayId === "" ||
-      getReadableObjectName({ name, address, displayId }) === "" ||
-      isLegacyMockObjectValue(name) ||
-      isLegacyMockObjectValue(address)
+      getReadableObjectName({ name, address, displayId }) === ""
     ) return;
 
     result.set(displayId, { id, displayId, name, address, units });
@@ -365,3 +347,4 @@ export function createEinheitenFromObjektmodul(
     };
   });
 }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          

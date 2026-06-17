@@ -14,7 +14,7 @@ import {
   distributeIntegerTotal,
   getObjectStorageKeyByDisplayId,
   getReadableObjectName,
-  isLegacyMockObjectValue,
+
   isTechnicalObjectName,
   isTechnicalIdentifier,
   pickFirstStringField,
@@ -2146,9 +2146,7 @@ export function NebenkostenAbrechnungen({ documents }: NebenkostenAbrechnungenPr
       >(NEBENKOSTEN_STORAGE_KEYS.finalReports, null);
 
       const bereinigteAbrechnungen = Array.isArray(gespeicherteAbrechnungen)
-        ? gespeicherteAbrechnungen.filter(
-            (item) => !isLegacyMockObjectValue(String(item.objektName ?? "")),
-          )
+        ? gespeicherteAbrechnungen
         : [];
 
       applyPersistedWorkspace(
@@ -4034,3 +4032,4 @@ export function NebenkostenAbrechnungen({ documents }: NebenkostenAbrechnungenPr
   );
 
 }
+                                                                                                                             
