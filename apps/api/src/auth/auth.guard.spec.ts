@@ -19,15 +19,20 @@ function createJwt(payload: object, privateKey: object, kid = 'test-kid') {
 }
 
 function createContext(authorization?: string) {
+  const request = {
+    headers: authorization ? { authorization } : {},
+  };
+
   return {
-    getHandler: jest.fn(),
-    getClass: jest.fn(),
-    switchToHttp: () => ({
-      getRequest: () => ({
-        headers: authorization ? { authorization } : {},
+    context: {
+      getHandler: jest.fn(),
+      getClass: jest.fn(),
+      switchToHttp: () => ({
+        getRequest: () => request,
       }),
-    }),
-  } as never;
+    } as never,
+    request,
+  };
 }
 
 describe('AuthGuard', () => {
@@ -52,9 +57,18 @@ describe('AuthGuard', () => {
 
   it('allows requests in dev auth mode', async () => {
     process.env.AUTH_MODE = 'dev';
+    process.env.DEV_TENANT_SLUG = 'default';
     const guard = new AuthGuard(reflector);
+    const { context, request } = createContext();
 
-    await expect(guard.canActivate(createContext())).resolves.toBe(true);
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(request).toMatchObject({
+      user: {
+        externalId: 'dev-user',
+        email: 'admin@immologik.local',
+        appTenantSlug: 'default',
+      },
+    });
   });
 
   it('validates a signed Entra bearer token', async () => {
@@ -69,6 +83,10 @@ describe('AuthGuard', () => {
         exp: now + 300,
         iss: 'https://login.microsoftonline.com/tenant-1/v2.0',
         nbf: now - 30,
+        name: 'Erika Beispiel',
+        oid: 'user-oid-1',
+        preferred_username: 'erika@example.com',
+        roles: ['ADMIN'],
       },
       privateKey,
     );
@@ -79,10 +97,18 @@ describe('AuthGuard', () => {
     } as Response);
 
     const guard = new AuthGuard(reflector);
+    const { context, request } = createContext(`Bearer ${token}`);
 
-    await expect(
-      guard.canActivate(createContext(`Bearer ${token}`)),
-    ).resolves.toBe(true);
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(request).toMatchObject({
+      user: {
+        externalId: 'user-oid-1',
+        email: 'erika@example.com',
+        displayName: 'Erika Beispiel',
+        roles: ['ADMIN'],
+        appTenantSlug: 'default',
+      },
+    });
   });
 
   it('rejects tokens for a different audience', async () => {
@@ -106,9 +132,10 @@ describe('AuthGuard', () => {
     } as Response);
 
     const guard = new AuthGuard(reflector);
+    const { context } = createContext(`Bearer ${token}`);
 
-    await expect(
-      guard.canActivate(createContext(`Bearer ${token}`)),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
   });
 });

@@ -8,6 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { createPublicKey, createVerify, type JsonWebKey } from 'crypto';
 import { Request } from 'express';
+import type { AuthenticatedUser, RequestWithUser } from './authenticated-user';
 import { IS_PUBLIC_KEY } from './public.decorator';
 
 type JwtHeader = {
@@ -19,7 +20,14 @@ type JwtPayload = {
   aud?: string | string[];
   exp?: number;
   iss?: string;
+  name?: string;
   nbf?: number;
+  oid?: string;
+  preferred_username?: string;
+  roles?: string[];
+  scp?: string;
+  tid?: string;
+  upn?: string;
 };
 
 type JwksKey = JsonWebKey & {
@@ -60,13 +68,14 @@ export class AuthGuard implements CanActivate {
     }
 
     const authMode = process.env.AUTH_MODE ?? 'dev';
+    const request = context.switchToHttp().getRequest<Request & RequestWithUser>();
 
     if (authMode === 'dev') {
+      request.user = this.createDevUser();
       return true;
     }
 
     if (authMode === 'entra') {
-      const request = context.switchToHttp().getRequest<Request>();
       const authHeader = request.headers['authorization'];
 
       if (!authHeader?.startsWith('Bearer ')) {
@@ -75,7 +84,9 @@ export class AuthGuard implements CanActivate {
         );
       }
 
-      await this.validateEntraToken(authHeader.slice('Bearer '.length));
+      request.user = await this.validateEntraToken(
+        authHeader.slice('Bearer '.length),
+      );
       return true;
     }
 
@@ -87,7 +98,7 @@ export class AuthGuard implements CanActivate {
     );
   }
 
-  private async validateEntraToken(token: string) {
+  private async validateEntraToken(token: string): Promise<AuthenticatedUser> {
     const tenantId = this.readRequiredEnv('ENTRA_TENANT_ID');
     const clientId = this.readRequiredEnv('ENTRA_CLIENT_ID');
     const expectedAudiences = this.readExpectedAudiences(clientId);
@@ -118,6 +129,8 @@ export class AuthGuard implements CanActivate {
     if (!verifier.verify(publicKey, signature)) {
       throw new UnauthorizedException('Bearer-Token-Signatur ist ungültig.');
     }
+
+    return this.createUserFromEntraPayload(payload);
   }
 
   private validateTokenClaims(
@@ -233,5 +246,34 @@ export class AuthGuard implements CanActivate {
       .filter(Boolean);
 
     return configuredAudiences?.length ? configuredAudiences : [clientId];
+  }
+
+  private createDevUser(): AuthenticatedUser {
+    return {
+      externalId: process.env.DEV_USER_ID?.trim() || 'dev-user',
+      email: process.env.DEV_USER_EMAIL?.trim() || 'admin@immologik.local',
+      displayName: process.env.DEV_USER_NAME?.trim() || 'Development User',
+      roles: ['ADMIN'],
+      appTenantSlug: process.env.DEV_TENANT_SLUG?.trim() || 'default',
+    };
+  }
+
+  private createUserFromEntraPayload(payload: JwtPayload): AuthenticatedUser {
+    const email = payload.preferred_username || payload.upn;
+    const externalId = payload.oid || email;
+
+    if (!externalId || !email) {
+      throw new UnauthorizedException(
+        'Bearer-Token enthält keine verwertbare Benutzerkennung.',
+      );
+    }
+
+    return {
+      externalId,
+      email,
+      displayName: payload.name || email,
+      roles: payload.roles ?? [],
+      appTenantSlug: process.env.DEFAULT_TENANT_SLUG?.trim() || 'default',
+    };
   }
 }

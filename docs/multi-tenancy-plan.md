@@ -134,7 +134,7 @@ Spaeter:
 
 ## Reihenfolge fuer Umsetzung
 
-1. Request-Kontext + Tests.
+1. Request-Kontext + Tests. Erledigt: AuthGuard setzt `request.user`, `@CurrentUser()` ist vorhanden.
 2. Default-Mandant-Seed.
 3. Migration `appTenantId` mit Backfill.
 4. Objekte mandantenfaehig machen.
