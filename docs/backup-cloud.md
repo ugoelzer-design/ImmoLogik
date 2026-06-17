@@ -70,3 +70,97 @@ run-cloud-backup.sh
 5. Zeitplan: taeglich nachts, z.B. 02:30.
 
 Nach dem ersten Lauf sollte im OneDrive-Ordner mindestens `immologik-postgres-latest.sql` liegen.
+
+## Restore-Runbook
+
+Der Restore ist bewusst ein manueller Admin-Ablauf. Nicht direkt gegen die laufende Produktion testen, sondern zuerst in einer neuen Test-Resource oder nach einem frischen Server-Snapshot.
+
+### 1. Backup-Dateien pruefen
+
+Im Backup-Container:
+
+```sh
+rclone lsf "$BACKUP_REMOTE"
+rclone lsl "$BACKUP_REMOTE/immologik-postgres-latest.sql"
+rclone lsl "$BACKUP_REMOTE/immologik-files-latest.tar.gz"
+```
+
+Erwartung:
+
+- `immologik-postgres-latest.sql` ist vorhanden und groesser als 0 Byte.
+- `immologik-files-latest.tar.gz` ist vorhanden, wenn MinIO-Dateien gesichert wurden.
+
+Am 17.06.2026 verifiziert:
+
+- `immologik-postgres-latest.sql`
+- `immologik-files-latest.tar.gz`
+- timestamped Dateien `2026-06-17_053439`
+- SQL-Latest-Groesse: `32120` Byte
+
+### 2. Zielumgebung vorbereiten
+
+1. Neue Test-Resource oder Server-Snapshot anlegen.
+2. App einmal starten lassen, damit Container und Volumes existieren.
+3. API/Web stoppen, damit waehrend des Restores keine Schreibzugriffe stattfinden.
+4. Postgres- und MinIO-Container identifizieren:
+
+```sh
+docker ps -a --format 'table {{.Names}}\t{{.Status}}' | grep -E 'postgres|minio|backup'
+```
+
+### 3. Datenbank wiederherstellen
+
+Variablen setzen:
+
+```sh
+BACKUP_CONTAINER=<backup-container>
+POSTGRES_CONTAINER=<postgres-container>
+```
+
+Im Backup-Container die SQL-Datei lokal ablegen und auf den Host kopieren:
+
+```sh
+docker exec "$BACKUP_CONTAINER" sh -c 'mkdir -p /tmp/restore && rclone copy "$BACKUP_REMOTE/immologik-postgres-latest.sql" /tmp/restore'
+docker cp "$BACKUP_CONTAINER":/tmp/restore/immologik-postgres-latest.sql ./immologik-postgres-latest.sql
+docker cp ./immologik-postgres-latest.sql "$POSTGRES_CONTAINER":/tmp/immologik-postgres-latest.sql
+```
+
+Restore im Postgres-Container ausfuehren:
+
+```sh
+docker exec -it "$POSTGRES_CONTAINER" sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /tmp/immologik-postgres-latest.sql'
+```
+
+Danach grob pruefen:
+
+```sh
+docker exec -it "$POSTGRES_CONTAINER" sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\dt"'
+```
+
+### 4. Dateien wiederherstellen
+
+Wenn `immologik-files-latest.tar.gz` vorhanden ist:
+
+```sh
+MINIO_CONTAINER=<minio-container>
+docker exec "$BACKUP_CONTAINER" sh -c 'mkdir -p /tmp/restore && rclone copy "$BACKUP_REMOTE/immologik-files-latest.tar.gz" /tmp/restore'
+docker cp "$BACKUP_CONTAINER":/tmp/restore/immologik-files-latest.tar.gz ./immologik-files-latest.tar.gz
+docker cp ./immologik-files-latest.tar.gz "$MINIO_CONTAINER":/tmp/immologik-files-latest.tar.gz
+docker exec -it "$MINIO_CONTAINER" sh -c 'tar -xzf /tmp/immologik-files-latest.tar.gz -C /data'
+```
+
+Falls der MinIO-Datenpfad im Container abweicht, vorher pruefen:
+
+```sh
+docker exec -it "$MINIO_CONTAINER" sh -c 'ls -la /data /minio-data 2>/dev/null || true'
+```
+
+### 5. App pruefen
+
+1. API/Web wieder starten.
+2. `/api/v1/health` pruefen.
+3. Dashboard oeffnen.
+4. Objekte, Mieter, Vertraege und Dokumentliste pruefen.
+5. Ein Dokument herunterladen.
+
+Der Restore gilt erst als bestanden, wenn Datenbankdaten sichtbar sind und mindestens ein Dokument erfolgreich geoeffnet werden kann.
