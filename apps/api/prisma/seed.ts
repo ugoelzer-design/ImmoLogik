@@ -2,7 +2,50 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+async function seedDefaultAppTenant() {
+  const tenantSlug =
+    process.env.DEFAULT_TENANT_SLUG?.trim() ||
+    process.env.DEV_TENANT_SLUG?.trim() ||
+    'default';
+  const tenantName = process.env.DEFAULT_TENANT_NAME?.trim() || 'Default';
+  const userEmail =
+    process.env.DEV_USER_EMAIL?.trim() || 'admin@immologik.local';
+  const userName = process.env.DEV_USER_NAME?.trim() || 'Development User';
+
+  const tenant = await prisma.tenant.upsert({
+    where: { slug: tenantSlug },
+    update: {
+      name: tenantName,
+      isActive: true,
+    },
+    create: {
+      slug: tenantSlug,
+      name: tenantName,
+      isActive: true,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: userEmail },
+    update: {
+      displayName: userName,
+      role: 'ADMIN',
+      isActive: true,
+      tenantId: tenant.id,
+    },
+    create: {
+      email: userEmail,
+      displayName: userName,
+      role: 'ADMIN',
+      isActive: true,
+      tenantId: tenant.id,
+    },
+  });
+}
+
 async function main() {
+  await seedDefaultAppTenant();
+
   await prisma.propertyObject.createMany({
     data: [
       { displayId: 'WEG-001', name: 'Bergstrasse 12', address: 'Bergstrasse 12, 10115 Berlin', type: 'Wohnobjekt', status: 'Aktiv', units: 4, occupancy: '75%', monthlyTargetRent: '3200 EUR', note: '' },

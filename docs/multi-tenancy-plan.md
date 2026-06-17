@@ -135,7 +135,7 @@ Spaeter:
 ## Reihenfolge fuer Umsetzung
 
 1. Request-Kontext + Tests. Erledigt: AuthGuard setzt `request.user`, `@CurrentUser()` ist vorhanden.
-2. Default-Mandant-Seed.
+2. Default-Mandant-Seed. Erledigt: Prisma-Seed legt `Tenant(default)` und Admin-User idempotent an.
 3. Migration `appTenantId` mit Backfill.
 4. Objekte mandantenfaehig machen.
 5. Dokumente mandantenfaehig machen.
