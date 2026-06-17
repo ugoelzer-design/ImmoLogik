@@ -42,10 +42,10 @@ export class CreateTenantDto {
   phone!: string;
 
   @ApiPropertyOptional({
-    example: 'active',
-    description: 'Status des Mieters (active, inactive)',
+    example: 'Aktiv',
+    description: 'Status des Mieters (Aktiv, Ausstehend, Beendet)',
   })
   @IsOptional()
-  @IsIn(['active', 'inactive'])
+  @IsIn(['Aktiv', 'Ausstehend', 'Beendet'])
   status?: string;
 }

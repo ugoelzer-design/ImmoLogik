@@ -48,10 +48,10 @@ export class CreateContractDto {
   endDate!: string;
 
   @ApiPropertyOptional({
-    example: 'active',
-    description: 'Status des Vertrags',
+    example: 'Aktiv',
+    description: 'Status des Vertrags (Aktiv, In Prüfung, Läuft aus)',
   })
   @IsOptional()
-  @IsIn(['active', 'inactive', 'terminated'])
+  @IsIn(['Aktiv', 'In Prüfung', 'Läuft aus'])
   status?: string;
 }
