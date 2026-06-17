@@ -156,9 +156,7 @@ export class DocumentsService {
       where: Object.keys(where).length > 0 ? where : undefined,
       orderBy: [{ reportYear: 'desc' }, { createdAt: 'desc' }],
     });
-    const mappedDocuments = await Promise.all(
-      docs.map((d) => this.mapWithUrl(d)),
-    );
+    const mappedDocuments = docs.map((doc) => this.mapForList(doc));
 
     const normalizedActionState = filters.actionState?.trim();
     const filteredByActionState =
@@ -699,6 +697,19 @@ export class DocumentsService {
     return this.mapWithUrl(updated);
   }
 
+  private mapForList(doc: Document) {
+    const fileAvailable = doc.status !== 'Fehlt';
+    const openIssues = this.getOpenIssues(doc, fileAvailable);
+    const actionState = this.getPrimaryActionState(doc, fileAvailable);
+
+    return this.toResponse(doc, {
+      downloadUrl: null,
+      fileAvailable,
+      openIssues,
+      actionState,
+    });
+  }
+
   private async mapWithUrl(doc: Document) {
     let downloadUrl: string | null = null;
     let fileAvailable = true;
@@ -729,6 +740,23 @@ export class DocumentsService {
     const openIssues = this.getOpenIssues(doc, fileAvailable);
     const actionState = this.getPrimaryActionState(doc, fileAvailable);
 
+    return this.toResponse(doc, {
+      downloadUrl,
+      fileAvailable,
+      openIssues,
+      actionState,
+    });
+  }
+
+  private toResponse(
+    doc: Document,
+    options: {
+      downloadUrl: string | null;
+      fileAvailable: boolean;
+      openIssues: string[];
+      actionState: DocumentActionState | null;
+    },
+  ) {
     return {
       id: doc.id,
       title: doc.title,
@@ -743,12 +771,12 @@ export class DocumentsService {
       category: doc.category || 'Sonstiges',
       status: doc.status || 'Vorhanden',
       uploadedBy: doc.uploadedBy,
-      downloadUrl,
+      downloadUrl: options.downloadUrl,
       storageKey: doc.storageKey,
       storagePath: this.minio.getPhysicalPath(doc.storageKey),
-      fileAvailable,
-      openIssues,
-      actionState,
+      fileAvailable: options.fileAvailable,
+      openIssues: options.openIssues,
+      actionState: options.actionState,
       createdAt: new Date(doc.createdAt).toISOString(),
       updatedAt: new Date(doc.updatedAt).toISOString(),
     };

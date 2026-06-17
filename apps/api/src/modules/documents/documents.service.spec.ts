@@ -81,8 +81,6 @@ describe('DocumentsService', () => {
         updatedAt: new Date('2026-03-22T11:00:00.000Z'),
       },
     ]);
-    minio.getPresignedUrl.mockResolvedValueOnce('https://download.test/doc-1');
-
     const result = await service.findAll();
 
     expect(result).toEqual([
@@ -101,7 +99,7 @@ describe('DocumentsService', () => {
         category: 'Sonstiges',
         status: 'Vorhanden',
         uploadedBy: null,
-        downloadUrl: 'https://download.test/doc-1',
+        downloadUrl: null,
         storagePath: null,
         fileAvailable: true,
         openIssues: ['Keine Objektzuordnung hinterlegt'],
@@ -110,6 +108,8 @@ describe('DocumentsService', () => {
         updatedAt: '2026-03-22T11:00:00.000Z',
       },
     ]);
+    expect(minio.fileExists).not.toHaveBeenCalled();
+    expect(minio.getPresignedUrl).not.toHaveBeenCalled();
   });
 
   it('exports the document inventory as csv for backup and stock checks', async () => {
@@ -211,21 +211,18 @@ describe('DocumentsService', () => {
         unitLabel: null,
         reportYear: null,
         category: null,
-        status: null,
+        status: 'Fehlt',
         uploadedBy: null,
         createdAt: new Date('2026-03-22T10:00:00.000Z'),
         updatedAt: new Date('2026-03-22T11:00:00.000Z'),
       },
     ]);
-    minio.fileExists.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
-    minio.getPresignedUrl.mockResolvedValueOnce(
-      'https://download.test/doc-available',
-    );
-
     const result = await service.findAll({ fileState: 'missing' });
 
     expect(result).toHaveLength(1);
     expect(result[0]?.id).toBe('doc-missing-filter');
+    expect(minio.fileExists).not.toHaveBeenCalled();
+    expect(minio.getPresignedUrl).not.toHaveBeenCalled();
   });
 
   it('includes search conditions when loading documents', async () => {
@@ -659,7 +656,7 @@ describe('DocumentsService', () => {
     );
   });
 
-  it('marks documents as missing when the physical file is not available', async () => {
+  it('marks list documents as missing when they are fachlich missing', async () => {
     prisma.document.findMany.mockResolvedValueOnce([
       {
         id: 'doc-missing',
@@ -674,19 +671,20 @@ describe('DocumentsService', () => {
         unitLabel: null,
         reportYear: null,
         category: null,
-        status: null,
+        status: 'Fehlt',
         uploadedBy: null,
         createdAt: new Date('2026-03-22T10:00:00.000Z'),
         updatedAt: new Date('2026-03-22T11:00:00.000Z'),
       },
     ]);
-    minio.fileExists.mockResolvedValueOnce(false);
     const result = await service.findAll();
 
     expect(result[0]?.fileAvailable).toBe(false);
     expect(result[0]?.downloadUrl).toBeNull();
     expect(result[0]?.actionState).toBe('file_missing');
     expect(result[0]?.openIssues).toContain('Datei fehlt in der Ablage');
+    expect(minio.fileExists).not.toHaveBeenCalled();
+    expect(minio.getPresignedUrl).not.toHaveBeenCalled();
   });
 
   it('marks documents without object assignment as open assignment cases', async () => {
@@ -710,10 +708,6 @@ describe('DocumentsService', () => {
         updatedAt: new Date('2026-03-22T11:00:00.000Z'),
       },
     ]);
-    minio.getPresignedUrl.mockResolvedValueOnce(
-      'https://download.test/doc-unassigned',
-    );
-
     const result = await service.findAll();
 
     expect(result[0]?.actionState).toBe('assignment_missing');
