@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -17,6 +18,43 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import type { Response } from 'express';
 import { DocumentsService } from './documents.service';
+
+export const DOCUMENT_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+export const DOCUMENT_UPLOAD_ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+] as const;
+
+export function documentUploadFileFilter(
+  _request: unknown,
+  file: Express.Multer.File,
+  callback: (error: Error | null, acceptFile: boolean) => void,
+) {
+  if (
+    DOCUMENT_UPLOAD_ALLOWED_MIME_TYPES.includes(
+      file.mimetype as (typeof DOCUMENT_UPLOAD_ALLOWED_MIME_TYPES)[number],
+    )
+  ) {
+    callback(null, true);
+    return;
+  }
+
+  callback(
+    new BadRequestException(
+      'Ungültiger Dateityp. Erlaubt sind PDF, JPEG und PNG.',
+    ),
+    false,
+  );
+}
+
+const documentUploadInterceptorOptions = {
+  storage: memoryStorage(),
+  limits: {
+    fileSize: DOCUMENT_UPLOAD_MAX_BYTES,
+  },
+  fileFilter: documentUploadFileFilter,
+};
 
 @ApiTags('documents')
 @Controller('documents')
@@ -87,7 +125,7 @@ export class DocumentsController {
   }
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  @UseInterceptors(FileInterceptor('file', documentUploadInterceptorOptions))
   upload(
     @UploadedFile() file: Express.Multer.File,
     @Body('objectId') objectId: string,
@@ -128,7 +166,7 @@ export class DocumentsController {
   }
 
   @Post(':id/file')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  @UseInterceptors(FileInterceptor('file', documentUploadInterceptorOptions))
   attachFile(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
