@@ -185,6 +185,7 @@ async function main() {
     if (!existing) {
       await prisma.vertrag.create({
         data: {
+          appTenantId: object.appTenantId,
           objectId: object.id,
           tenantId: tenant.id,
           rentUnitId: tenant.rentUnitId,

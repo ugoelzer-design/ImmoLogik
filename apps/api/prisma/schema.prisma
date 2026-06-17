@@ -19,6 +19,7 @@ model Tenant {
   documents       Document[]
   rentUnits       RentUnit[]
   mieter          Mieter[]
+  vertraege       Vertrag[]
 }
 
 model User {
@@ -138,6 +139,7 @@ model Mieter {
 
 model Vertrag {
   id         String         @id @default(cuid())
+  appTenantId String
   objectId   String
   tenantId   String
   rentUnitId String?
@@ -147,10 +149,12 @@ model Vertrag {
   status     String         @default("Aktiv")
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
+  appTenant  Tenant         @relation(fields: [appTenantId], references: [id], onDelete: Restrict)
   object     PropertyObject @relation(fields: [objectId], references: [id], onDelete: Restrict)
   tenant     Mieter         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   rentUnit   RentUnit?      @relation(fields: [rentUnitId], references: [id], onDelete: SetNull)
 
+  @@index([appTenantId])
   @@index([objectId])
   @@index([tenantId])
   @@index([rentUnitId])

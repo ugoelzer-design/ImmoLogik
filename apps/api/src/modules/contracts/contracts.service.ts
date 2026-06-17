@@ -11,9 +11,14 @@ import type { Prisma } from '@prisma/client';
 export class ContractsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(pagination: Pick<Prisma.VertragFindManyArgs, 'skip' | 'take'> = {}) {
+  async findAll(
+    pagination: Pick<Prisma.VertragFindManyArgs, 'skip' | 'take'> = {},
+    appTenantSlug = 'default',
+  ) {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const contracts = await this.prisma.vertrag.findMany({
       ...pagination,
+      where: { appTenantId },
       include: {
         object: true,
         tenant: {
@@ -29,7 +34,8 @@ export class ContractsService {
     return contracts.map((contract) => this.toResponse(contract));
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const contract = await this.prisma.vertrag.findUnique({
       where: { id },
       include: {
@@ -43,22 +49,25 @@ export class ContractsService {
       },
     });
 
-    if (!contract) {
+    if (!contract || contract.appTenantId !== appTenantId) {
       throw new NotFoundException('Vertrag nicht gefunden.');
     }
 
     return this.toResponse(contract);
   }
 
-  async create(dto: CreateContractDto) {
+  async create(dto: CreateContractDto, appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const resolvedRentUnitId = await this.assertRelationConsistency(
       dto.objectId,
       dto.tenantId,
       dto.rentUnitId,
+      appTenantId,
     );
 
     const contract = await this.prisma.vertrag.create({
       data: {
+        appTenantId,
         objectId: dto.objectId,
         tenantId: dto.tenantId,
         rentUnitId: resolvedRentUnitId,
@@ -81,7 +90,12 @@ export class ContractsService {
     return this.toResponse(contract);
   }
 
-  async update(id: string, dto: Partial<CreateContractDto>) {
+  async update(
+    id: string,
+    dto: Partial<CreateContractDto>,
+    appTenantSlug = 'default',
+  ) {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const existing = await this.prisma.vertrag.findUnique({
       where: { id },
       include: {
@@ -89,7 +103,7 @@ export class ContractsService {
       },
     });
 
-    if (!existing) {
+    if (!existing || existing.appTenantId !== appTenantId) {
       throw new NotFoundException('Vertrag nicht gefunden.');
     }
 
@@ -101,6 +115,7 @@ export class ContractsService {
       nextObjectId,
       nextTenantId,
       nextRentUnitId,
+      appTenantId,
     );
 
     const contract = await this.prisma.vertrag.update({
@@ -134,8 +149,8 @@ export class ContractsService {
     return this.toResponse(contract);
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, appTenantSlug = 'default') {
+    await this.findOne(id, appTenantSlug);
     return this.prisma.vertrag.delete({ where: { id } });
   }
 
@@ -143,16 +158,21 @@ export class ContractsService {
     objectId: string,
     tenantId: string,
     rentUnitId?: string | null,
+    appTenantId?: string,
   ) {
     const tenant = await this.prisma.mieter.findUnique({
       where: { id: tenantId },
+      include: { object: true },
     });
 
-    if (!tenant) {
+    if (!tenant || (appTenantId && tenant.appTenantId !== appTenantId)) {
       throw new BadRequestException('Mieter nicht gefunden.');
     }
 
-    if (tenant.objectId !== objectId) {
+    if (
+      tenant.objectId !== objectId ||
+      (appTenantId && tenant.object.appTenantId !== appTenantId)
+    ) {
       throw new BadRequestException(
         'Mieter gehört nicht zum gewählten Objekt.',
       );
@@ -163,13 +183,17 @@ export class ContractsService {
     if (resolvedRentUnitId) {
       const rentUnit = await this.prisma.rentUnit.findUnique({
         where: { id: resolvedRentUnitId },
+        include: { object: true },
       });
 
-      if (!rentUnit) {
+      if (!rentUnit || (appTenantId && rentUnit.appTenantId !== appTenantId)) {
         throw new BadRequestException('Mieteinheit nicht gefunden.');
       }
 
-      if (rentUnit.objectId !== objectId) {
+      if (
+        rentUnit.objectId !== objectId ||
+        (appTenantId && rentUnit.object.appTenantId !== appTenantId)
+      ) {
         throw new BadRequestException(
           'Mieteinheit gehört nicht zum gewählten Objekt.',
         );
@@ -188,6 +212,7 @@ export class ContractsService {
     startDate: string;
     endDate: string;
     status: string;
+    appTenantId?: string | null;
     object: { id: string; name: string; displayId: string };
     tenant: {
       id: string;
@@ -243,5 +268,18 @@ export class ContractsService {
       default:
         return status;
     }
+  }
+
+  private async resolveAppTenantId(appTenantSlug: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug: appTenantSlug },
+      select: { id: true },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Mandant nicht gefunden.');
+    }
+
+    return tenant.id;
   }
 }

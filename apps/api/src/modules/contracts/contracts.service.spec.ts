@@ -5,6 +5,9 @@ import { ContractsService } from './contracts.service';
 describe('ContractsService', () => {
   let service: ContractsService;
   let prisma: {
+    tenant: {
+      findUnique: jest.Mock;
+    };
     vertrag: {
       findMany: jest.Mock;
       findUnique: jest.Mock;
@@ -22,6 +25,9 @@ describe('ContractsService', () => {
 
   beforeEach(() => {
     prisma = {
+      tenant: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'tenant-1' }),
+      },
       vertrag: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
@@ -44,6 +50,7 @@ describe('ContractsService', () => {
     prisma.vertrag.findMany.mockResolvedValueOnce([
       {
         id: 'c-1',
+        appTenantId: 'tenant-1',
         objectId: 'obj-1',
         tenantId: 't-1',
         rentUnitId: 'ru-1',
@@ -83,8 +90,10 @@ describe('ContractsService', () => {
   it('rejects contracts when the tenant does not belong to the object', async () => {
     prisma.mieter.findUnique.mockResolvedValueOnce({
       id: 't-1',
+      appTenantId: 'tenant-1',
       objectId: 'obj-2',
       rentUnitId: 'ru-1',
+      object: { appTenantId: 'tenant-1' },
     });
 
     await expect(
@@ -102,15 +111,20 @@ describe('ContractsService', () => {
   it('persists normalized contract statuses on create', async () => {
     prisma.mieter.findUnique.mockResolvedValueOnce({
       id: 't-1',
+      appTenantId: 'tenant-1',
       objectId: 'obj-1',
       rentUnitId: 'ru-1',
+      object: { appTenantId: 'tenant-1' },
     });
     prisma.rentUnit.findUnique.mockResolvedValueOnce({
       id: 'ru-1',
+      appTenantId: 'tenant-1',
       objectId: 'obj-1',
+      object: { appTenantId: 'tenant-1' },
     });
     prisma.vertrag.create.mockResolvedValueOnce({
       id: 'c-4',
+      appTenantId: 'tenant-1',
       objectId: 'obj-1',
       tenantId: 't-1',
       rentUnitId: 'ru-1',
@@ -140,6 +154,7 @@ describe('ContractsService', () => {
       data: expect.objectContaining({
         objectId: 'obj-1',
         tenantId: 't-1',
+        appTenantId: 'tenant-1',
         rentUnitId: 'ru-1',
         status: 'Läuft aus',
       }),
@@ -163,6 +178,7 @@ describe('ContractsService', () => {
   it('updates contracts and keeps ui-friendly statuses', async () => {
     prisma.vertrag.findUnique.mockResolvedValueOnce({
       id: 'c-5',
+      appTenantId: 'tenant-1',
       objectId: 'obj-1',
       tenantId: 't-1',
       rentUnitId: 'ru-1',
@@ -170,15 +186,20 @@ describe('ContractsService', () => {
     });
     prisma.mieter.findUnique.mockResolvedValueOnce({
       id: 't-1',
+      appTenantId: 'tenant-1',
       objectId: 'obj-1',
       rentUnitId: 'ru-1',
+      object: { appTenantId: 'tenant-1' },
     });
     prisma.rentUnit.findUnique.mockResolvedValueOnce({
       id: 'ru-1',
+      appTenantId: 'tenant-1',
       objectId: 'obj-1',
+      object: { appTenantId: 'tenant-1' },
     });
     prisma.vertrag.update.mockResolvedValueOnce({
       id: 'c-5',
+      appTenantId: 'tenant-1',
       objectId: 'obj-1',
       tenantId: 't-1',
       rentUnitId: 'ru-1',

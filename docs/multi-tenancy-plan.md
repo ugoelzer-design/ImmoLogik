@@ -11,7 +11,7 @@ Stand: 17.06.2026
   - `Document` hat `appTenantId`.
   - `RentUnit` hat `appTenantId`.
   - `Mieter` hat `appTenantId`.
-  - `Vertrag`
+  - `Vertrag` hat `appTenantId`.
   - `Meter`
   - `MeterReading`
   - `ReadingCampaign`
@@ -140,8 +140,9 @@ Spaeter:
 4. Objekte mandantenfaehig machen. Erledigt: Objekt-Endpunkte nutzen `@CurrentUser()` und filtern nach App-Mandant.
 5. Dokumente mandantenfaehig machen. Erledigt: Dokument-Endpunkte nutzen `@CurrentUser()`, Dokumente tragen `appTenantId`, Listen/Export/Duplizierung/Objektbezug sind mandantengefiltert.
 6. Mieteinheiten und fachliche Mieter mandantenfaehig machen. Erledigt: Endpunkte nutzen `@CurrentUser()`, Datensaetze tragen `appTenantId`, Objekt-/Einheitsbezug wird gegen den App-Mandanten geprueft.
-7. Restliche Services nachziehen.
-8. Entra-User-Mapping aktivieren.
+7. Vertraege mandantenfaehig machen. Erledigt: Endpunkte nutzen `@CurrentUser()`, Datensaetze tragen `appTenantId`, Objekt-/Mieter-/Einheitsbezug wird gegen den App-Mandanten geprueft.
+8. Restliche Services nachziehen.
+9. Entra-User-Mapping aktivieren.
 
 ## Risiken
 
@@ -152,4 +153,4 @@ Spaeter:
 
 ## Empfehlung
 
-Naechster Code-Schritt: Vertraege mandantenfaehig machen und weitere Fremd-ID-Pruefungen gegen denselben App-Mandanten nachziehen.
+Naechster Code-Schritt: Zaehler und Ablesekampagnen mandantenfaehig machen und weitere Fremd-ID-Pruefungen gegen denselben App-Mandanten nachziehen.
