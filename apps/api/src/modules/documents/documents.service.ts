@@ -66,6 +66,7 @@ type PreparedUploadFile = {
 
 type DuplicateCheckInput = {
   excludeId?: string;
+  appTenantId: string;
   title: string;
   fileName: string;
   category: string;
@@ -92,7 +93,8 @@ export class DocumentsService {
     private readonly minio: MinioService,
   ) {}
 
-  async findAll(filters: FindAllFilters = {}) {
+  async findAll(filters: FindAllFilters = {}, appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const normalizedObjectId = filters.objectId?.trim();
     const normalizedRentUnitId = filters.rentUnitId?.trim();
     const normalizedCategory = filters.category?.trim();
@@ -109,6 +111,7 @@ export class DocumentsService {
         : undefined;
 
     const where: Prisma.DocumentWhereInput = {
+      appTenantId,
       ...(normalizedObjectId ? { objectId: normalizedObjectId } : {}),
       ...(normalizedRentUnitId ? { rentUnitId: normalizedRentUnitId } : {}),
       ...(normalizedCategory ? { category: normalizedCategory } : {}),
@@ -195,14 +198,18 @@ export class DocumentsService {
     return filteredByActionState;
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const doc = await this.prisma.document.findUnique({ where: { id } });
-    if (!doc) throw new NotFoundException('Dokument nicht gefunden.');
+    if (!doc || this.isDifferentAppTenant(doc, appTenantId))
+      throw new NotFoundException('Dokument nicht gefunden.');
     return this.mapWithUrl(doc);
   }
 
-  async exportInventoryCsv() {
+  async exportInventoryCsv(appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const docs = await this.prisma.document.findMany({
+      where: { appTenantId },
       orderBy: [
         { objectName: 'asc' },
         { unitLabel: 'asc' },
@@ -270,7 +277,9 @@ export class DocumentsService {
     category: string,
     title: string,
     uploadedBy: string | undefined,
+    appTenantSlug = 'default',
   ) {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     if (!file) {
       throw new BadRequestException('Bitte eine Datei hochladen.');
     }
@@ -300,8 +309,10 @@ export class DocumentsService {
     const relationMeta = await this.resolveDocumentRelations(
       objectId,
       rentUnitId,
+      appTenantId,
     );
     await this.ensureNoDuplicateDocument({
+      appTenantId,
       title: normalizedTitle,
       fileName: file.originalname,
       category: normalizedCategory,
@@ -339,6 +350,7 @@ export class DocumentsService {
     try {
       doc = await this.prisma.document.create({
         data: {
+          appTenantId,
           title: normalizedTitle,
           fileName: file.originalname,
           mimeType: preparedFile.mimeType,
@@ -372,7 +384,8 @@ export class DocumentsService {
     return this.mapWithUrl(doc);
   }
 
-  async createMissing(input: CreateMissingInput) {
+  async createMissing(input: CreateMissingInput, appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const normalizedCategory = input.category?.trim() || 'Sonstiges';
     const normalizedTitle = input.title?.trim();
     const normalizedUploadedBy = input.uploadedBy?.trim() || null;
@@ -390,11 +403,13 @@ export class DocumentsService {
     const relationMeta = await this.resolveDocumentRelations(
       input.objectId,
       input.rentUnitId,
+      appTenantId,
     );
     const placeholderFileName =
       this.buildMissingPlaceholderFileName(normalizedTitle);
 
     await this.ensureNoDuplicateDocument({
+      appTenantId,
       title: normalizedTitle,
       fileName: placeholderFileName,
       category: normalizedCategory,
@@ -412,6 +427,7 @@ export class DocumentsService {
 
     const doc = await this.prisma.document.create({
       data: {
+        appTenantId,
         title: normalizedTitle,
         fileName: placeholderFileName,
         mimeType: 'application/x-immologik-missing-document',
@@ -431,19 +447,26 @@ export class DocumentsService {
     return this.mapWithUrl(doc);
   }
 
-  async attachFile(id: string, file: Express.Multer.File, uploadedBy?: string) {
+  async attachFile(
+    id: string,
+    file: Express.Multer.File,
+    uploadedBy?: string,
+    appTenantSlug = 'default',
+  ) {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     if (!file) {
       throw new BadRequestException('Bitte eine Datei hochladen.');
     }
 
     const doc = await this.prisma.document.findUnique({ where: { id } });
-    if (!doc) {
+    if (!doc || this.isDifferentAppTenant(doc, appTenantId)) {
       throw new NotFoundException('Dokument nicht gefunden.');
     }
 
     const relationMeta = await this.resolveDocumentRelations(
       doc.objectId ?? undefined,
       doc.rentUnitId ?? undefined,
+      appTenantId,
     );
     const timestamp = Date.now();
     const safeName = this.sanitizeStorageFileName(file.originalname);
@@ -559,6 +582,7 @@ export class DocumentsService {
   private async resolveDocumentRelations(
     objectId?: string,
     rentUnitId?: string,
+    appTenantId?: string,
   ): Promise<ResolvedDocumentRelations> {
     const normalizedObjectId = objectId?.trim() || null;
     const normalizedRentUnitId = rentUnitId?.trim() || null;
@@ -579,6 +603,13 @@ export class DocumentsService {
       });
 
       if (!rentUnit) {
+        throw new BadRequestException('Mieteinheit nicht gefunden.');
+      }
+
+      if (
+        appTenantId &&
+        this.isDifferentAppTenant(rentUnit.object, appTenantId)
+      ) {
         throw new BadRequestException('Mieteinheit nicht gefunden.');
       }
 
@@ -603,7 +634,10 @@ export class DocumentsService {
         where: { id: resolvedObjectId },
       });
 
-      if (!object) {
+      if (
+        !object ||
+        (appTenantId && this.isDifferentAppTenant(object, appTenantId))
+      ) {
         throw new BadRequestException('Objekt nicht gefunden.');
       }
 
@@ -624,9 +658,14 @@ export class DocumentsService {
     };
   }
 
-  async getDownloadUrl(id: string): Promise<{ url: string }> {
+  async getDownloadUrl(
+    id: string,
+    appTenantSlug = 'default',
+  ): Promise<{ url: string }> {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const doc = await this.prisma.document.findUnique({ where: { id } });
-    if (!doc) throw new NotFoundException('Dokument nicht gefunden.');
+    if (!doc || this.isDifferentAppTenant(doc, appTenantId))
+      throw new NotFoundException('Dokument nicht gefunden.');
     const fileAvailable = await this.minio.fileExists(doc.storageKey);
     if (!fileAvailable) {
       throw new NotFoundException('Datei fehlt in der Ablage.');
@@ -639,13 +678,18 @@ export class DocumentsService {
     return this.minio.getStorageStatus();
   }
 
-  async getFileContent(id: string): Promise<{
+  async getFileContent(
+    id: string,
+    appTenantSlug = 'default',
+  ): Promise<{
     file: StreamableFile;
     mimeType: string;
     fileName: string;
   }> {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const doc = await this.prisma.document.findUnique({ where: { id } });
-    if (!doc) throw new NotFoundException('Dokument nicht gefunden.');
+    if (!doc || this.isDifferentAppTenant(doc, appTenantId))
+      throw new NotFoundException('Dokument nicht gefunden.');
     const fileAvailable = await this.minio.fileExists(doc.storageKey);
     if (!fileAvailable) {
       throw new NotFoundException('Datei fehlt in der Ablage.');
@@ -659,14 +703,17 @@ export class DocumentsService {
     };
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, appTenantSlug = 'default'): Promise<void> {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const doc = await this.prisma.document.findUnique({ where: { id } });
-    if (!doc) throw new NotFoundException('Dokument nicht gefunden.');
+    if (!doc || this.isDifferentAppTenant(doc, appTenantId))
+      throw new NotFoundException('Dokument nicht gefunden.');
     await this.minio.deleteFile(doc.storageKey);
     await this.prisma.document.delete({ where: { id } });
   }
 
-  async updateStatus(id: string, status: string) {
+  async updateStatus(id: string, status: string, appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const normalizedStatus = status?.trim();
     if (
       !normalizedStatus ||
@@ -678,7 +725,8 @@ export class DocumentsService {
     }
 
     const doc = await this.prisma.document.findUnique({ where: { id } });
-    if (!doc) throw new NotFoundException('Dokument nicht gefunden.');
+    if (!doc || this.isDifferentAppTenant(doc, appTenantId))
+      throw new NotFoundException('Dokument nicht gefunden.');
     const updated = await this.prisma.document.update({
       where: { id },
       data: { status: normalizedStatus },
@@ -686,9 +734,14 @@ export class DocumentsService {
     return this.mapWithUrl(updated);
   }
 
-  async updateMetadata(id: string, input: UpdateMetadataInput) {
+  async updateMetadata(
+    id: string,
+    input: UpdateMetadataInput,
+    appTenantSlug = 'default',
+  ) {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
     const doc = await this.prisma.document.findUnique({ where: { id } });
-    if (!doc) {
+    if (!doc || this.isDifferentAppTenant(doc, appTenantId)) {
       throw new NotFoundException('Dokument nicht gefunden.');
     }
 
@@ -706,9 +759,11 @@ export class DocumentsService {
     const relationMeta = await this.resolveDocumentRelations(
       input.objectId,
       input.rentUnitId,
+      appTenantId,
     );
     await this.ensureNoDuplicateDocument({
       excludeId: doc.id,
+      appTenantId,
       title: normalizedTitle,
       fileName: doc.fileName,
       category: normalizedCategory,
@@ -907,6 +962,7 @@ export class DocumentsService {
     const duplicate = await this.prisma.document.findFirst({
       where: {
         ...(input.excludeId ? { NOT: { id: input.excludeId } } : {}),
+        appTenantId: input.appTenantId,
         title: input.title,
         fileName: input.fileName,
         category: input.category,
@@ -922,6 +978,26 @@ export class DocumentsService {
         'Ein gleiches Dokument ist für dieselbe Zuordnung bereits vorhanden.',
       );
     }
+  }
+
+  private async resolveAppTenantId(appTenantSlug: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug: appTenantSlug },
+      select: { id: true },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Mandant nicht gefunden.');
+    }
+
+    return tenant.id;
+  }
+
+  private isDifferentAppTenant(
+    record: { appTenantId?: string | null },
+    appTenantId: string,
+  ) {
+    return record.appTenantId !== undefined && record.appTenantId !== appTenantId;
   }
 
   private parseReportYear(

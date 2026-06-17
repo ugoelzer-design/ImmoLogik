@@ -6,6 +6,9 @@ import { DocumentsService } from './documents.service';
 describe('DocumentsService', () => {
   let service: DocumentsService;
   let prisma: {
+    tenant: {
+      findUnique: jest.Mock;
+    };
     document: {
       findMany: jest.Mock;
       findFirst: jest.Mock;
@@ -33,6 +36,9 @@ describe('DocumentsService', () => {
 
   beforeEach(() => {
     prisma = {
+      tenant: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'tenant-1' }),
+      },
       document: {
         findMany: jest.fn(),
         findFirst: jest.fn(),
@@ -169,6 +175,7 @@ describe('DocumentsService', () => {
 
     expect(prisma.document.findMany).toHaveBeenCalledWith({
       where: {
+        appTenantId: 'tenant-1',
         objectId: 'object-1',
         rentUnitId: 'unit-7',
         category: 'Mietvertrag',
@@ -235,6 +242,7 @@ describe('DocumentsService', () => {
 
     expect(prisma.document.findMany).toHaveBeenCalledWith({
       where: {
+        appTenantId: 'tenant-1',
         OR: [
           { title: { contains: 'WEG-001', mode: 'insensitive' } },
           { fileName: { contains: 'WEG-001', mode: 'insensitive' } },

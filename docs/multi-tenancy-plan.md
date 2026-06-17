@@ -8,7 +8,7 @@ Stand: 17.06.2026
 - `User.tenantId` verweist auf `Tenant`.
 - Fachmodelle sind teilweise mandantengebunden:
   - `PropertyObject` hat `appTenantId` als Pilot.
-  - `Document`
+  - `Document` hat `appTenantId`.
   - `RentUnit`
   - `Mieter`
   - `Vertrag`
@@ -138,7 +138,7 @@ Spaeter:
 2. Default-Mandant-Seed. Erledigt: Prisma-Seed legt `Tenant(default)` und Admin-User idempotent an.
 3. Migration `PropertyObject.appTenantId` mit Backfill. Erledigt fuer Objekt-Pilot.
 4. Objekte mandantenfaehig machen. Erledigt: Objekt-Endpunkte nutzen `@CurrentUser()` und filtern nach App-Mandant.
-5. Dokumente mandantenfaehig machen.
+5. Dokumente mandantenfaehig machen. Erledigt: Dokument-Endpunkte nutzen `@CurrentUser()`, Dokumente tragen `appTenantId`, Listen/Export/Duplizierung/Objektbezug sind mandantengefiltert.
 6. Restliche Services nachziehen.
 7. Entra-User-Mapping aktivieren.
 
@@ -151,4 +151,4 @@ Spaeter:
 
 ## Empfehlung
 
-Naechster Code-Schritt: Dokumente mandantenfaehig machen und Fremd-ID-Pruefungen gegen denselben App-Mandanten nachziehen.
+Naechster Code-Schritt: Mieteinheiten und fachliche Mieter mandantenfaehig machen und weitere Fremd-ID-Pruefungen gegen denselben App-Mandanten nachziehen.

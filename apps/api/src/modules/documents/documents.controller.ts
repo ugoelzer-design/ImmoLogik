@@ -17,6 +17,8 @@ import { ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import type { Response } from 'express';
+import { CurrentUser } from '../../auth/current-user.decorator';
+import type { AuthenticatedUser } from '../../auth/authenticated-user';
 import { getPaginationOptions } from '../../common/pagination';
 import { DocumentsService } from './documents.service';
 
@@ -63,8 +65,13 @@ export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
   @Get('inventory/export')
-  async exportInventory(@Res({ passthrough: true }) response: Response) {
-    const exportFile = await this.documentsService.exportInventoryCsv();
+  async exportInventory(
+    @CurrentUser() user: AuthenticatedUser | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const exportFile = await this.documentsService.exportInventoryCsv(
+      user?.appTenantSlug,
+    );
     response.setHeader('Content-Type', 'text/csv; charset=utf-8');
     response.setHeader(
       'Content-Disposition',
@@ -75,6 +82,7 @@ export class DocumentsController {
 
   @Get()
   findAll(
+    @CurrentUser() user: AuthenticatedUser | undefined,
     @Query('objectId') objectId?: string,
     @Query('rentUnitId') rentUnitId?: string,
     @Query('category') category?: string,
@@ -86,17 +94,20 @@ export class DocumentsController {
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
   ) {
-    return this.documentsService.findAll({
-      objectId,
-      rentUnitId,
-      category,
-      status,
-      reportYear,
-      search,
-      fileState,
-      actionState,
-      ...getPaginationOptions({ page, pageSize }),
-    });
+    return this.documentsService.findAll(
+      {
+        objectId,
+        rentUnitId,
+        category,
+        status,
+        reportYear,
+        search,
+        fileState,
+        actionState,
+        ...getPaginationOptions({ page, pageSize }),
+      },
+      user?.appTenantSlug,
+    );
   }
 
   @Get('storage/status')
@@ -105,21 +116,31 @@ export class DocumentsController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.documentsService.findOne(id);
+  findOne(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ) {
+    return this.documentsService.findOne(id, user?.appTenantSlug);
   }
 
   @Get(':id/download')
-  getDownloadUrl(@Param('id') id: string) {
-    return this.documentsService.getDownloadUrl(id);
+  getDownloadUrl(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ) {
+    return this.documentsService.getDownloadUrl(id, user?.appTenantSlug);
   }
 
   @Get(':id/content')
   async getContent(
     @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser | undefined,
     @Res({ passthrough: true }) response: Response,
   ): Promise<StreamableFile> {
-    const result = await this.documentsService.getFileContent(id);
+    const result = await this.documentsService.getFileContent(
+      id,
+      user?.appTenantSlug,
+    );
     response.setHeader('Content-Type', result.mimeType);
     response.setHeader(
       'Content-Disposition',
@@ -131,6 +152,7 @@ export class DocumentsController {
   @Post('upload')
   @UseInterceptors(FileInterceptor('file', documentUploadInterceptorOptions))
   upload(
+    @CurrentUser() user: AuthenticatedUser | undefined,
     @UploadedFile() file: Express.Multer.File,
     @Body('objectId') objectId: string,
     @Body('rentUnitId') rentUnitId: string,
@@ -147,11 +169,13 @@ export class DocumentsController {
       category || 'Sonstiges',
       title,
       uploadedBy,
+      user?.appTenantSlug,
     );
   }
 
   @Post('missing')
   createMissing(
+    @CurrentUser() user: AuthenticatedUser | undefined,
     @Body('objectId') objectId: string,
     @Body('rentUnitId') rentUnitId: string,
     @Body('reportYear') reportYear: string,
@@ -159,34 +183,48 @@ export class DocumentsController {
     @Body('title') title: string,
     @Body('uploadedBy') uploadedBy: string,
   ) {
-    return this.documentsService.createMissing({
-      objectId,
-      rentUnitId,
-      reportYear,
-      category,
-      title,
-      uploadedBy,
-    });
+    return this.documentsService.createMissing(
+      {
+        objectId,
+        rentUnitId,
+        reportYear,
+        category,
+        title,
+        uploadedBy,
+      },
+      user?.appTenantSlug,
+    );
   }
 
   @Post(':id/file')
   @UseInterceptors(FileInterceptor('file', documentUploadInterceptorOptions))
   attachFile(
     @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser | undefined,
     @UploadedFile() file: Express.Multer.File,
     @Body('uploadedBy') uploadedBy: string,
   ) {
-    return this.documentsService.attachFile(id, file, uploadedBy);
+    return this.documentsService.attachFile(
+      id,
+      file,
+      uploadedBy,
+      user?.appTenantSlug,
+    );
   }
 
   @Patch(':id/status')
-  updateStatus(@Param('id') id: string, @Body('status') status: string) {
-    return this.documentsService.updateStatus(id, status);
+  updateStatus(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+    @Body('status') status: string,
+  ) {
+    return this.documentsService.updateStatus(id, status, user?.appTenantSlug);
   }
 
   @Patch(':id')
   updateMetadata(
     @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser | undefined,
     @Body('objectId') objectId: string,
     @Body('rentUnitId') rentUnitId: string,
     @Body('reportYear') reportYear: string,
@@ -194,18 +232,25 @@ export class DocumentsController {
     @Body('title') title: string,
     @Body('uploadedBy') uploadedBy: string,
   ) {
-    return this.documentsService.updateMetadata(id, {
-      objectId,
-      rentUnitId,
-      reportYear,
-      category,
-      title,
-      uploadedBy,
-    });
+    return this.documentsService.updateMetadata(
+      id,
+      {
+        objectId,
+        rentUnitId,
+        reportYear,
+        category,
+        title,
+        uploadedBy,
+      },
+      user?.appTenantSlug,
+    );
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.documentsService.remove(id);
+  remove(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ) {
+    return this.documentsService.remove(id, user?.appTenantSlug);
   }
 }
