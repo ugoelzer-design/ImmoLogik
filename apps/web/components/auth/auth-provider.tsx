@@ -93,16 +93,20 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  if (!entraAuthEnabled) {
+    return children;
+  }
+
+  return <EntraAuthProvider>{children}</EntraAuthProvider>;
+}
+
+function EntraAuthProvider({ children }: { children: React.ReactNode }) {
   const [msalInstance] = useState(
     () => new PublicClientApplication(msalConfig),
   );
-  const [isReady, setIsReady] = useState(!entraAuthEnabled);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    if (!entraAuthEnabled) {
-      return;
-    }
-
     let isMounted = true;
     void msalInstance.initialize().then(() => {
       if (isMounted) {
@@ -115,12 +119,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [msalInstance]);
 
-  if (!entraAuthEnabled || !isReady) {
-    if (entraAuthEnabled && !isReady) {
-      return null;
-    }
-
-    return children;
+  if (!isReady) {
+    return null;
   }
 
   return (
