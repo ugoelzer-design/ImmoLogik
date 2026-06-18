@@ -114,3 +114,39 @@ export const documentUploadSchema = z
   );
 
 export type DocumentUploadFormValues = z.infer<typeof documentUploadSchema>;
+
+// ─── Zählerablesung ─────────────────────────────────────────────────────────
+
+export const readingCampaignSchema = z.object({
+  objectId: requiredString("WEG"),
+  reportYear: z
+    .string()
+    .trim()
+    .regex(/^\d{4}$/, { message: "Berichtsjahr muss vierstellig sein." })
+    .refine((value) => Number(value) >= 2000 && Number(value) <= 2100, {
+      message: "Berichtsjahr muss zwischen 2000 und 2100 liegen.",
+    }),
+});
+
+export type ReadingCampaignFormValues = z.infer<typeof readingCampaignSchema>;
+
+export const tenantReadingSchema = z.object({
+  readerName: requiredString("Name der ablesenden Person"),
+  readingDate: isoDateString("Ablesedatum"),
+  readings: z
+    .array(
+      z.object({
+        meterId: requiredString("Zähler"),
+        value: z
+          .string()
+          .trim()
+          .min(1, { message: "Bitte alle Zählerstände ausfüllen." })
+          .refine((value) => Number.isFinite(Number(value)) && Number(value) >= 0, {
+            message: "Zählerstände müssen positive Zahlen sein.",
+          }),
+      }),
+    )
+    .min(1, { message: "Keine Zähler vorhanden." }),
+});
+
+export type TenantReadingFormValues = z.infer<typeof tenantReadingSchema>;

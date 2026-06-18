@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatCard } from "@/components/ui/stat-card";
 import { createReadingCampaign } from "@/features/meter-readings/services/meter-readings.service";
+import { readingCampaignSchema } from "@/lib/validation/schemas";
 import type { ImmoObject } from "@/types/object";
 import type { ReadingCampaign } from "@/types/meter-reading";
 
@@ -60,8 +61,9 @@ export function ReadingCampaignsModule({
   );
 
   async function handleGenerate() {
-    if (!objectId || !reportYear.trim()) {
-      setError("Bitte WEG und Berichtsjahr auswählen.");
+    const validation = readingCampaignSchema.safeParse({ objectId, reportYear });
+    if (!validation.success) {
+      setError(validation.error.issues[0]?.message ?? "Bitte WEG und Berichtsjahr auswählen.");
       return;
     }
 
@@ -69,8 +71,8 @@ export function ReadingCampaignsModule({
       setSaving(true);
       setError(null);
       const campaign = await createReadingCampaign({
-        objectId,
-        reportYear: Number(reportYear),
+        objectId: validation.data.objectId,
+        reportYear: Number(validation.data.reportYear),
       });
 
       setCampaigns((current) => {

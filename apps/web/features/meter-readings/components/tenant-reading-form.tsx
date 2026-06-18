@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { submitMeterReadings } from "@/features/meter-readings/services/meter-readings.service";
+import { tenantReadingSchema } from "@/lib/validation/schemas";
 import type { MeterAccess } from "@/types/meter-reading";
 
 type TenantReadingFormProps = {
@@ -40,8 +41,21 @@ export function TenantReadingForm({ initialAccess }: TenantReadingFormProps) {
   );
 
   async function handleSubmit() {
-    if (!isValid) {
-      setError("Bitte alle Zählerstände ausfüllen.");
+    const validation = tenantReadingSchema.safeParse({
+      readerName,
+      readingDate,
+      readings: access.meters.map((meter) => ({
+        meterId: meter.id,
+        value: values[meter.id] ?? "",
+      })),
+    });
+
+    if (!isValid || !validation.success) {
+      setError(
+        validation.success
+          ? "Bitte alle Zählerstände ausfüllen."
+          : validation.error.issues[0]?.message ?? "Bitte alle Zählerstände ausfüllen.",
+      );
       return;
     }
 
@@ -49,10 +63,10 @@ export function TenantReadingForm({ initialAccess }: TenantReadingFormProps) {
       setSaving(true);
       setError(null);
       const updated = await submitMeterReadings(access.token, {
-        readerName,
-        readings: access.meters.map((meter) => ({
-          meterId: meter.id,
-          value: Number(values[meter.id]),
+        readerName: validation.data.readerName,
+        readings: validation.data.readings.map((reading) => ({
+          meterId: reading.meterId,
+          value: Number(reading.value),
           date: readingDate,
         })),
       });
