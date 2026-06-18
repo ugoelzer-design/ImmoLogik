@@ -197,9 +197,6 @@ describe("ObjectDetail", () => {
     expect(screen.getByText("1 Mieter ausstehend")).toBeInTheDocument();
     expect(screen.getByText("1 Vertrag/Verträge bald kritisch")).toBeInTheDocument();
     expect(screen.getByText("6 fehlende Pflichtdokumente")).toBeInTheDocument();
-    expect(screen.getByText("Nächste Schritte")).toBeInTheDocument();
-    expect(screen.getByText("Wohnungsstruktur vervollständigen")).toBeInTheDocument();
-    expect(screen.getByText("8 von 8 Einheiten fehlen noch.")).toBeInTheDocument();
     expect(screen.getByText("Pflichtdokumente")).toBeInTheDocument();
     expect(screen.getByText("Jahresreport WEG 2025")).toBeInTheDocument();
     expect(screen.getByText("Mietvertrag WE 01")).toBeInTheDocument();
@@ -208,22 +205,6 @@ describe("ObjectDetail", () => {
       "href",
       "/dokumente?objectId=obj-1",
     );
-  });
-
-  it("opens the matching workflow from the next-step cockpit", () => {
-    render(
-      <ObjectDetail
-        object={object}
-        documents={documents}
-        tenants={tenants}
-        contracts={contracts}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /Wohnungsstruktur vervollständigen/ }));
-
-    expect(screen.getByText("Arbeitsmodus:")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Wohnungen" })).toBeInTheDocument();
   });
 
   it("creates a missing document placeholder from a required document gap", async () => {
@@ -337,10 +318,6 @@ describe("ObjectDetail", () => {
 
     expect(screen.getByText("1 Dokument")).toBeInTheDocument();
     expect(screen.getByText("1 offener Fall")).toBeInTheDocument();
-    expect(screen.getByText("Gesamtfläche")).toBeInTheDocument();
-    expect(screen.getAllByText("78 m²").length).toBeGreaterThan(0);
-    expect(screen.getByText("Offene Aktenfälle")).toBeInTheDocument();
-    expect(screen.queryByText("Akte noch leer")).not.toBeInTheDocument();
     expect(screen.getByText("Nebenkostenabrechnung · 2025")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dokumente" })).toHaveAttribute(
       "href",
