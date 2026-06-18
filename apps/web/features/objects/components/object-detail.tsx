@@ -191,6 +191,14 @@ type ValidatedUtilityDraft = {
   note: string;
 };
 
+type ObjectNextStep = {
+  key: string;
+  label: string;
+  detail: string;
+  section: SectionKey;
+  tone: "warning" | "info" | "success";
+};
+
 const SECTION_LABELS: Record<SectionKey, string> = {
   overview: "Übersicht",
   apartments: "Wohnungen",
@@ -1590,6 +1598,17 @@ function isContractExpiring(contract: Contract) {
   return endDate > now && endDate <= ninetyDaysFromNow;
 }
 
+function getNextStepClasses(tone: ObjectNextStep["tone"]) {
+  switch (tone) {
+    case "warning":
+      return "border-amber-200 bg-amber-50 text-amber-900 hover:border-amber-300";
+    case "success":
+      return "border-emerald-200 bg-emerald-50 text-emerald-900 hover:border-emerald-300";
+    default:
+      return "border-zinc-200 bg-white text-zinc-800 hover:border-zinc-300";
+  }
+}
+
 function ObjectDossierOverview({
   object,
   apartments,
@@ -1640,13 +1659,75 @@ function ObjectDossierOverview({
     0,
   );
   const persistedUnitCount = Math.max(apartments.length, rentUnits.length, object.units);
+  const plannedUnitCount = Number(object.units);
+  const hasPlannedUnits = Number.isFinite(plannedUnitCount) && plannedUnitCount > 0;
+  const unitStructureGap = hasPlannedUnits
+    ? Math.max(plannedUnitCount - Math.max(apartments.length, rentUnits.length), 0)
+    : 0;
+  const documentedUnitIds = new Set(
+    documents
+      .map((document) => document.rentUnitId)
+      .filter((rentUnitId): rentUnitId is string => Boolean(rentUnitId)),
+  );
+  const unitsWithoutDocuments = apartments.filter(
+    (apartment) => !documentedUnitIds.has(apartment.id),
+  ).length;
   const openHints = [
     ...(pendingTenants > 0 ? [`${pendingTenants} Mieter ausstehend`] : []),
     ...(expiringContracts > 0 ? [`${expiringContracts} Vertrag/Verträge bald kritisch`] : []),
+    ...(unitStructureGap > 0 ? [`${unitStructureGap} Einheiten noch nicht angelegt`] : []),
+    ...(unitsWithoutDocuments > 0 ? [`${unitsWithoutDocuments} Einheiten ohne Dokumente`] : []),
     ...(missingRequirements.length > 0 ? [`${missingRequirements.length} fehlende Pflichtdokumente`] : []),
     ...(openDocuments > 0 ? [`${openDocuments} offene Dokumentfälle`] : []),
     ...(missingFiles > 0 ? [`${missingFiles} Datei(en) fehlen in der Ablage`] : []),
     ...(openCampaigns > 0 ? [`${openCampaigns} offene Ablesekampagnen`] : []),
+  ];
+  const nextSteps: ObjectNextStep[] = [
+    ...(unitStructureGap > 0
+      ? [{
+        key: "unit-structure",
+        label: "Wohnungsstruktur vervollständigen",
+        detail: `${unitStructureGap} von ${object.units} Einheiten fehlen noch.`,
+        section: "apartments" as const,
+        tone: "warning" as const,
+      }]
+      : []),
+    ...(unitsWithoutDocuments > 0
+      ? [{
+        key: "unit-documents",
+        label: "Einheitenakten prüfen",
+        detail: `${unitsWithoutDocuments} Einheiten haben noch keine Dokumente.`,
+        section: "apartments" as const,
+        tone: "warning" as const,
+      }]
+      : []),
+    ...(missingRequirements.length > 0 || openDocuments > 0
+      ? [{
+        key: "documents",
+        label: "Pflichtdokumente schließen",
+        detail: `${missingRequirements.length} fehlend · ${openDocuments} offene Fälle.`,
+        section: "documents" as const,
+        tone: "warning" as const,
+      }]
+      : []),
+    ...(pendingTenants > 0 || expiringContracts > 0
+      ? [{
+        key: "tenancies",
+        label: "Mieter und Verträge klären",
+        detail: `${pendingTenants} Mieter ausstehend · ${expiringContracts} Verträge kritisch.`,
+        section: "tenancies" as const,
+        tone: "info" as const,
+      }]
+      : []),
+    ...(openCampaigns > 0
+      ? [{
+        key: "meters",
+        label: "Ablesungen nachhalten",
+        detail: `${openCampaigns} offene Kampagnen.`,
+        section: "meters" as const,
+        tone: "info" as const,
+      }]
+      : []),
   ];
 
   return (
@@ -1678,6 +1759,39 @@ function ObjectDossierOverview({
         <DetailField label="Mietverhältnisse" value={tenancies.length} />
         <DetailField label="Zähler" value={meters.length} />
         <DetailField label="Nebenkostenpositionen" value={utilities.length} />
+      </div>
+
+      <div className="rounded-xl border border-zinc-200 bg-white p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-zinc-900">Nächste Schritte</p>
+            <p className="mt-1 text-sm text-zinc-500">
+              Aus Objektstruktur, Dokumenten, Mietern und Ablesungen abgeleitet.
+            </p>
+          </div>
+          <span className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-600">
+            {nextSteps.length === 0 ? "Objekt stabil" : `${nextSteps.length} To-dos`}
+          </span>
+        </div>
+        {nextSteps.length === 0 ? (
+          <p className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            Keine dringenden nächsten Schritte aus den aktuellen Daten.
+          </p>
+        ) : (
+          <div className="mt-3 grid gap-3 lg:grid-cols-3">
+            {nextSteps.slice(0, 3).map((step) => (
+              <button
+                key={step.key}
+                type="button"
+                onClick={() => onOpenSection(step.section)}
+                className={`rounded-xl border px-4 py-3 text-left transition ${getNextStepClasses(step.tone)}`}
+              >
+                <p className="text-sm font-semibold">{step.label}</p>
+                <p className="mt-1 text-xs opacity-80">{step.detail}</p>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -2082,6 +2196,39 @@ function ApartmentsSection({
   const rentedCount = apartments.filter(
     (apartment) => apartment.status === "vermietet",
   ).length;
+  const totalArea = apartments.reduce((sum, apartment) => {
+    const parsedArea = Number(apartment.area);
+    return Number.isFinite(parsedArea) ? sum + parsedArea : sum;
+  }, 0);
+  const apartmentDocumentSummaries = apartments.map((apartment) => {
+    const apartmentDocuments = documents
+      .filter((document) => document.rentUnitId === apartment.id)
+      .sort(
+        (left, right) =>
+          getDocumentTimestamp(right.updatedAt) -
+          getDocumentTimestamp(left.updatedAt),
+      );
+    const openDocumentCount = apartmentDocuments.filter(
+      (document) =>
+        document.fileAvailable === false ||
+        (document.openIssues?.length ?? 0) > 0 ||
+        document.status === "Fehlt" ||
+        document.status === "In Prüfung",
+    ).length;
+
+    return {
+      apartmentId: apartment.id,
+      documents: apartmentDocuments,
+      openDocumentCount,
+      latestDocument: apartmentDocuments[0] ?? null,
+    };
+  });
+  const apartmentsWithoutDocuments = apartmentDocumentSummaries.filter(
+    (summary) => summary.documents.length === 0,
+  ).length;
+  const apartmentsWithOpenDocumentCases = apartmentDocumentSummaries.filter(
+    (summary) => summary.openDocumentCount > 0,
+  ).length;
 
   const objectUnitsNumber = Number(object.units);
   const hasUnitsLimit =
@@ -2283,6 +2430,29 @@ function ApartmentsSection({
               <p className="mt-2 text-sm font-medium text-zinc-900">
                 {remainingCount ?? "—"}
               </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                Gesamtfläche
+              </p>
+              <p className="mt-2 text-sm font-medium text-zinc-900">
+                {totalArea > 0 ? `${totalArea.toLocaleString("de-DE")} m²` : "—"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                Ohne Akte
+              </p>
+              <p className="mt-2 text-sm font-medium text-zinc-900">{apartmentsWithoutDocuments}</p>
+            </div>
+            <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                Offene Aktenfälle
+              </p>
+              <p className="mt-2 text-sm font-medium text-zinc-900">{apartmentsWithOpenDocumentCases}</p>
             </div>
           </div>
 
@@ -2558,21 +2728,13 @@ function ApartmentsSection({
                   className="grid grid-cols-[minmax(0,1.1fr)_120px_160px_180px_220px] items-center gap-4 rounded-2xl border border-zinc-200 bg-white px-4 py-4"
                 >
                   {(() => {
-                    const apartmentDocuments = documents
-                      .filter((document) => document.rentUnitId === apartment.id)
-                      .sort(
-                        (left, right) =>
-                          getDocumentTimestamp(right.updatedAt) -
-                          getDocumentTimestamp(left.updatedAt),
-                      );
-                    const openDocumentCount = apartmentDocuments.filter(
-                      (document) =>
-                        document.fileAvailable === false ||
-                        (document.openIssues?.length ?? 0) > 0 ||
-                        document.status === "Fehlt" ||
-                        document.status === "In Prüfung",
-                    ).length;
-                    const latestDocument = apartmentDocuments[0] ?? null;
+                    const documentSummary = apartmentDocumentSummaries.find(
+                      (summary) => summary.apartmentId === apartment.id,
+                    );
+                    const apartmentDocuments = documentSummary?.documents ?? [];
+                    const openDocumentCount = documentSummary?.openDocumentCount ?? 0;
+                    const latestDocument = documentSummary?.latestDocument ?? null;
+                    const hasDocumentGap = apartmentDocuments.length === 0;
 
                     return (
                       <>
@@ -2611,6 +2773,15 @@ function ApartmentsSection({
                       <p className="mt-1 text-xs font-medium text-amber-700">
                         {openDocumentCount} offener Fall
                         {openDocumentCount === 1 ? "" : "e"}
+                      </p>
+                    ) : null}
+                    {hasDocumentGap ? (
+                      <p className="mt-1 text-xs font-medium text-rose-700">
+                        Akte noch leer
+                      </p>
+                    ) : openDocumentCount === 0 ? (
+                      <p className="mt-1 text-xs font-medium text-emerald-700">
+                        Akte ohne offene Fälle
                       </p>
                     ) : null}
                   </div>
