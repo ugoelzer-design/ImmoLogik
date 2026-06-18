@@ -48,6 +48,11 @@ fi
 echo "Uploading backup files to $backup_remote..."
 rclone copy "$workdir" "$backup_remote" --create-empty-src-dirs
 
+echo "Verifying uploaded backup..."
+BACKUP_POSTGRES_FILE="immologik-postgres-$timestamp.sql" \
+BACKUP_FILES_ARCHIVE="immologik-files-$timestamp.tar.gz" \
+  /usr/local/bin/verify-cloud-backup.sh
+
 if [ "$keep_days" -gt 0 ] 2>/dev/null; then
   echo "Deleting remote timestamped backups older than $keep_days days..."
   rclone delete "$backup_remote" \
