@@ -7,6 +7,7 @@ import {
   getRentUnits,
   type RentUnit,
 } from "@/features/finances/services/rent-units.service";
+import { rentUnitSchema } from "@/lib/validation/schemas";
 
 export function MietuebersichtModule() {
   const [units, setUnits] = useState<RentUnit[]>([]);
@@ -28,12 +29,22 @@ export function MietuebersichtModule() {
   }, []);
 
   async function handleCreate() {
+    const validation = rentUnitSchema.safeParse(form);
+    if (!validation.success) {
+      setError(
+        validation.error.issues[0]?.message ??
+          "Bitte alle Felder korrekt ausfüllen.",
+      );
+      return;
+    }
+
     try {
       setError(null);
+      const payload = validation.data;
       const newUnit = await createRentUnit({
-        ...form,
-        sollMiete: parseFloat(form.sollMiete),
-        istMiete: parseFloat(form.istMiete || "0"),
+        ...payload,
+        sollMiete: Number(payload.sollMiete),
+        istMiete: Number(payload.istMiete || "0"),
       });
       setUnits((prev) => [...prev, newUnit]);
       setShowForm(false);

@@ -191,3 +191,31 @@ export const newUtilityStatementSchema = z
 export type NewUtilityStatementFormValues = z.infer<
   typeof newUtilityStatementSchema
 >;
+
+// ─── Mietübersicht ──────────────────────────────────────────────────────────
+
+const moneyString = (label: string, required = true) => {
+  const schema = z.string().trim();
+  const base = required
+    ? schema.min(1, { message: `${label} ist erforderlich.` })
+    : schema.optional().default("");
+
+  return base.refine(
+    (value) => value === "" || (Number.isFinite(Number(value)) && Number(value) >= 0),
+    { message: `${label} muss eine positive Zahl sein.` },
+  );
+};
+
+export const rentUnitSchema = z.object({
+  objectId: requiredString("Objekt-ID"),
+  unitLabel: requiredString("Einheit"),
+  tenant: requiredString("Mieter"),
+  sollMiete: moneyString("Soll-Miete"),
+  istMiete: moneyString("Ist-Miete", false),
+  zahlungsStatus: z.enum(["Offen", "Bezahlt", "Rückstand"], {
+    errorMap: () => ({ message: "Bitte einen gültigen Zahlungsstatus auswählen." }),
+  }),
+  faelligAm: isoDateString("Fälligkeitsdatum"),
+});
+
+export type RentUnitFormValues = z.infer<typeof rentUnitSchema>;
