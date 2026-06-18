@@ -114,3 +114,172 @@ export const documentUploadSchema = z
   );
 
 export type DocumentUploadFormValues = z.infer<typeof documentUploadSchema>;
+
+// ─── Zählerablesung ─────────────────────────────────────────────────────────
+
+export const readingCampaignSchema = z.object({
+  objectId: requiredString("WEG"),
+  reportYear: z
+    .string()
+    .trim()
+    .regex(/^\d{4}$/, { message: "Berichtsjahr muss vierstellig sein." })
+    .refine((value) => Number(value) >= 2000 && Number(value) <= 2100, {
+      message: "Berichtsjahr muss zwischen 2000 und 2100 liegen.",
+    }),
+});
+
+export type ReadingCampaignFormValues = z.infer<typeof readingCampaignSchema>;
+
+export const tenantReadingSchema = z.object({
+  readerName: requiredString("Name der ablesenden Person"),
+  readingDate: isoDateString("Ablesedatum"),
+  readings: z
+    .array(
+      z.object({
+        meterId: requiredString("Zähler"),
+        value: z
+          .string()
+          .trim()
+          .min(1, { message: "Bitte alle Zählerstände ausfüllen." })
+          .refine((value) => Number.isFinite(Number(value)) && Number(value) >= 0, {
+            message: "Zählerstände müssen positive Zahlen sein.",
+          }),
+      }),
+    )
+    .min(1, { message: "Keine Zähler vorhanden." }),
+});
+
+export type TenantReadingFormValues = z.infer<typeof tenantReadingSchema>;
+
+// ─── Nebenkostenabrechnung ──────────────────────────────────────────────────
+
+const utilityStatementPeriodShape = {
+    objectDisplayId: z.string().trim().optional(),
+    zeitraumVon: isoDateString("Zeitraum von"),
+    zeitraumBis: isoDateString("Zeitraum bis"),
+};
+
+export const utilityStatementPeriodSchema = z
+  .object(utilityStatementPeriodShape)
+  .refine(
+    (data) =>
+      !data.zeitraumVon ||
+      !data.zeitraumBis ||
+      new Date(data.zeitraumBis) >= new Date(data.zeitraumVon),
+    {
+      message: "Zeitraum bis darf nicht vor Zeitraum von liegen.",
+      path: ["zeitraumBis"],
+    },
+  );
+
+export const newUtilityStatementSchema = z
+  .object({
+    ...utilityStatementPeriodShape,
+    objectDisplayId: requiredString("Objekt"),
+  })
+  .refine(
+    (data) =>
+      !data.zeitraumVon ||
+      !data.zeitraumBis ||
+      new Date(data.zeitraumBis) >= new Date(data.zeitraumVon),
+    {
+      message: "Zeitraum bis darf nicht vor Zeitraum von liegen.",
+      path: ["zeitraumBis"],
+    },
+  );
+
+export type NewUtilityStatementFormValues = z.infer<
+  typeof newUtilityStatementSchema
+>;
+
+// ─── Mietübersicht ──────────────────────────────────────────────────────────
+
+const moneyString = (label: string, required = true) => {
+  const schema = z.string().trim();
+  const base = required
+    ? schema.min(1, { message: `${label} ist erforderlich.` })
+    : schema.optional().default("");
+
+  return base.refine(
+    (value) => value === "" || (Number.isFinite(Number(value)) && Number(value) >= 0),
+    { message: `${label} muss eine positive Zahl sein.` },
+  );
+};
+
+export const rentUnitSchema = z.object({
+  objectId: requiredString("Objekt-ID"),
+  unitLabel: requiredString("Einheit"),
+  tenant: requiredString("Mieter"),
+  sollMiete: moneyString("Soll-Miete"),
+  istMiete: moneyString("Ist-Miete", false),
+  zahlungsStatus: z.enum(["Offen", "Bezahlt", "Rückstand"], {
+    errorMap: () => ({ message: "Bitte einen gültigen Zahlungsstatus auswählen." }),
+  }),
+  faelligAm: isoDateString("Fälligkeitsdatum"),
+});
+
+export type RentUnitFormValues = z.infer<typeof rentUnitSchema>;
+
+// ─── Objekt-Detailformulare ─────────────────────────────────────────────────
+
+const dateInputString = (label: string) =>
+  z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, {
+      message: `${label} muss ein gültiges Datum sein.`,
+    })
+    .refine((value) => {
+      const [year, month, day] = value.split("-").map(Number);
+      const parsedDate = new Date(`${value}T00:00:00.000Z`);
+
+      return (
+        parsedDate.getUTCFullYear() === year &&
+        parsedDate.getUTCMonth() === month - 1 &&
+        parsedDate.getUTCDate() === day
+      );
+    },
+    {
+      message: `${label} muss ein gültiges Datum sein.`,
+    },
+  );
+
+export const objectDetailTenancySchema = z
+  .object({
+    apartmentId: requiredString("Wohnung"),
+    tenantName: requiredString("Mieter"),
+    startDate: dateInputString("Startdatum"),
+    endDate: z.string().trim().optional().default(""),
+    persons: z
+      .string()
+      .trim()
+      .min(1, { message: "Personenzahl ist erforderlich." })
+      .refine((value) => Number.isInteger(Number(value)) && Number(value) > 0, {
+        message: "Personenzahl muss eine positive ganze Zahl sein.",
+      }),
+  })
+  .refine(
+    (data) =>
+      data.endDate === "" ||
+      dateInputString("Enddatum").safeParse(data.endDate).success,
+    {
+      message: "Enddatum muss ein gültiges Datum sein.",
+      path: ["endDate"],
+    },
+  )
+  .refine((data) => data.endDate === "" || data.endDate >= data.startDate, {
+    message: "Enddatum darf nicht vor dem Startdatum liegen.",
+    path: ["endDate"],
+  });
+
+export const objectDetailMeterReadingSchema = z.object({
+  date: dateInputString("Ablesedatum"),
+  value: z
+    .string()
+    .trim()
+    .min(1, { message: "Zählerstand ist erforderlich." })
+    .refine((value) => Number.isFinite(Number(value)) && Number(value) >= 0, {
+      message: "Zählerstand muss eine positive Zahl sein.",
+    }),
+  reader: z.string().trim().optional().default(""),
+});

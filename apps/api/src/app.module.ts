@@ -32,4 +32,8 @@ import { AppService } from './app.service';
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
- 
+    consumer
+      .apply(RequestLoggingMiddleware, GlobalRateLimitMiddleware)
+      .forRoutes('*');
+  }
+}

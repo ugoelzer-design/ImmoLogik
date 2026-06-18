@@ -36,4 +36,6 @@ export const apiEndpoints = {
     meters: "/meter-readings/meters",
     campaigns: "/meter-readings/campaigns",
     access: (token: string) => `/meter-readings/access/${token}`,
-    submit: (token: s
+    submit: (token: string) => `/meter-readings/access/${token}/readings`,
+  },
+};

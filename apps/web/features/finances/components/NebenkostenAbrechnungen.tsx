@@ -3998,4 +3998,27 @@ export function NebenkostenAbrechnungen({ documents }: NebenkostenAbrechnungenPr
           </label>
         </div>
 
-        <div className="mt-6 flex flex-wr
+        <div className="mt-6 flex flex-wrap gap-2">
+          <StatusPill tone="dark">{gefilterteAbrechnungen.length} Treffer</StatusPill>
+          <StatusPill tone="amber">{countInArbeit} In Arbeit</StatusPill>
+          <StatusPill>{countArchiviert} Archiviert</StatusPill>
+        </div>
+      </section>
+
+      <NeueAbrechnungDialog
+        open={dialogOpen}
+        objekte={auswahlObjekte}
+        onClose={() => setDialogOpen(false)}
+        onCreate={handleCreate}
+      />
+
+      <BearbeitenAbrechnungDialog
+        open={bearbeitenOpen}
+        item={abrechnungZumBearbeiten}
+        onClose={handleCloseEdit}
+        onSave={handleSaveEdit}
+      />
+    </div>
+  );
+
+}

@@ -54,4 +54,19 @@ export async function getNextObjectDisplayId(): Promise<string> {
     apiEndpoints.objects.nextDisplayId,
   );
 
-  return normalizeDisplayId(preview.displ
+  return normalizeDisplayId(preview.displayId);
+}
+
+export async function deleteObject(id: string): Promise<void> {
+  await apiClient.del<void>(apiEndpoints.objects.detail(id));
+}
+
+export type ObjectModuleData = {
+  apartments: ObjectModuleApartment[];
+  tenancies: ObjectModuleTenancy[];
+  utilities: ObjectModuleUtility[];
+};
+
+export async function getObjectModuleData(id: string): Promise<ObjectModuleData> {
+  return apiClient.get<ObjectModuleData>(apiEndpoints.objects.moduleData(id));
+}

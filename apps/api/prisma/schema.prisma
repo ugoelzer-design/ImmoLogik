@@ -292,4 +292,23 @@ model UtilityStatement {
   status              String          @default("In Arbeit")
   settlementCreatedOn String
   settlementUpdatedOn String
-  approv
+  approvedOn          String?
+  positions           Json
+  units               Json
+  finalReportSnapshot Json?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  appTenant           Tenant          @relation(fields: [appTenantId], references: [id], onDelete: Restrict)
+  object              PropertyObject? @relation(fields: [objectId], references: [id], onDelete: SetNull)
+
+  @@index([appTenantId])
+  @@index([objectId])
+  @@index([objectDisplayId])
+  @@index([reportYear])
+  @@map("utility_statements")
+}
+
+enum InternalRole {
+  ADMIN
+  EMPLOYEE
+}

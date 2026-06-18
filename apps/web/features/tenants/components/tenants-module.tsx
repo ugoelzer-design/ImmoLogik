@@ -517,4 +517,79 @@ export function TenantsModule({ tenants: initialTenants, objects, rentUnits, doc
                       href={buildTenantContractDocumentsHref(item)}
                       className="text-xs font-medium text-blue-700 hover:text-blue-900"
                     >
-    
+                      Mietvertrag
+                    </Link>
+                    <Link
+                      href={buildTenantDocumentsHref(item)}
+                      className="text-xs font-medium text-blue-700 hover:text-blue-900"
+                    >
+                      Alle Unterlagen
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-zinc-200 bg-white p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-zinc-500">Mieterportal</p>
+                  {(() => {
+                    const portalState = portalLinks[item.id];
+                    if (portalState === "loading") {
+                      return <p className="mt-2 text-xs text-zinc-400">Generiere Link…</p>;
+                    }
+                    if (portalState) {
+                      const url = buildPortalUrl(portalState.token);
+                      return (
+                        <div className="mt-2 space-y-2">
+                          <p className="text-xs text-emerald-700 font-medium">Link aktiv</p>
+                          <input
+                            readOnly
+                            value={url}
+                            className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs text-zinc-700 outline-none"
+                            onFocus={(e) => e.target.select()}
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => navigator.clipboard.writeText(url)}
+                              className="rounded-lg border border-zinc-200 px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-50"
+                            >
+                              Kopieren
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleGeneratePortalLink(item.id)}
+                              className="rounded-lg border border-zinc-200 px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-50"
+                            >
+                              Erneuern
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="mt-2 space-y-2">
+                        <p className="text-xs text-zinc-500">
+                          {accessState === "E-Mail fehlt"
+                            ? "E-Mail hinterlegen, um Portal-Link zu generieren."
+                            : "Direkter Mieter-Self-Service: Stammdaten, Vertrag, Dokumente, Ablesungen."}
+                        </p>
+                        <button
+                          type="button"
+                          disabled={accessState === "E-Mail fehlt"}
+                          onClick={() => handleGeneratePortalLink(item.id)}
+                          className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-blue-500 disabled:opacity-40"
+                        >
+                          Portal-Link generieren
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            </article>
+          );
+          })}
+        </div>
+      </SectionCard>
+    </section>
+  );
+}

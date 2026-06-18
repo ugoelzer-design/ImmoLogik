@@ -150,4 +150,67 @@ export class ObjectsService {
       );
     }
 
-    return o
+    return obj;
+  }
+
+  async remove(id: string, appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
+    const object = await this.prisma.propertyObject.findFirst({
+      where: { id, appTenantId },
+      include: {
+        _count: {
+          select: {
+            documents: true,
+            rentUnits: true,
+            mieter: true,
+            vertraege: true,
+          },
+        },
+      },
+    });
+    if (!object) throw new NotFoundException('Objekt nicht gefunden.');
+
+    if (
+      object._count.documents > 0 ||
+      object._count.rentUnits > 0 ||
+      object._count.mieter > 0 ||
+      object._count.vertraege > 0
+    ) {
+      throw new BadRequestException(
+        'Objekt kann nicht gelöscht werden, solange noch Dokumente, Einheiten, Mieter oder Verträge verknüpft sind.',
+      );
+    }
+
+    return this.prisma.propertyObject.delete({ where: { id } });
+  }
+
+  private async getNextDisplayId(appTenantSlug = 'default') {
+    const appTenantId = await this.resolveAppTenantId(appTenantSlug);
+    const objects = await this.prisma.propertyObject.findMany({
+      where: { appTenantId },
+      select: { displayId: true },
+    });
+    let maxNumber = 0;
+    for (const object of objects) {
+      const match = object.displayId?.match(/^WEG-(\d+)$/);
+      if (!match) continue;
+      const currentNumber = Number(match[1]);
+      if (Number.isFinite(currentNumber) && currentNumber > maxNumber)
+        maxNumber = currentNumber;
+    }
+    return `WEG-${String(maxNumber + 1).padStart(3, '0')}`;
+  }
+
+  private async resolveAppTenantId(appTenantSlug: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug: appTenantSlug },
+      select: { id: true },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Mandant nicht gefunden.');
+    }
+
+    return tenant.id;
+  }
+}

@@ -57,4 +57,14 @@ export class ObjectsController {
     @Body() createObjectDto: CreateObjectDto,
     @CurrentUser() user: AuthenticatedUser | undefined,
   ) {
-    return this.objectsService.create(createObjectDto, user?
+    return this.objectsService.create(createObjectDto, user?.appTenantSlug);
+  }
+
+  @Delete(':id')
+  remove(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ) {
+    return this.objectsService.remove(id, user?.appTenantSlug);
+  }
+}

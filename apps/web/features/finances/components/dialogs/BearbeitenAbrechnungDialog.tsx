@@ -119,4 +119,23 @@ export function BearbeitenAbrechnungDialog({
           </div>
         </div>
 
-        <div className="flex fl
+        <div className="flex flex-col gap-2 border-t border-zinc-200 p-6 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={handleSave}
+            className="inline-flex h-11 items-center justify-center rounded-xl bg-teal-600 px-4 text-sm font-medium text-white"
+          >
+            Änderungen übernehmen
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800"
+          >
+            Abbrechen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

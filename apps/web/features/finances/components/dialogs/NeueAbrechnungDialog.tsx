@@ -289,4 +289,23 @@ export function NeueAbrechnungDialog({
             <div className="mt-6 flex flex-col gap-2">
               <button
                 type="button"
-                onClick={handleCr
+                onClick={handleCreate}
+                disabled={!canCreate}
+                className="inline-flex h-11 items-center justify-center rounded-xl bg-teal-600 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
+              >
+                Abrechnung erstellen
+              </button>
+              <button
+                type="button"
+                onClick={handleClose}
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800"
+              >
+                Abbrechen
+              </button>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  );
+}

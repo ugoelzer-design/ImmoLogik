@@ -136,4 +136,12 @@ export function MietuebersichtModule() {
             <div className="text-zinc-700">{u.sollMiete.toFixed(2)} €</div>
             <div className="text-zinc-700">{u.istMiete.toFixed(2)} €</div>
             <div className="flex items-center gap-2">
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${u.zahlungsStatus === "Bezahlt" ? "bg-emerald-100 text-emerald-700" : u.zahlungsS
+              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${u.zahlungsStatus === "Bezahlt" ? "bg-emerald-100 text-emerald-700" : u.zahlungsStatus === "Rückstand" ? "bg-rose-100 text-rose-700" : "bg-zinc-100 text-zinc-600"}`}>{u.zahlungsStatus}</span>
+              <button type="button" onClick={() => handleDelete(u.id)} className="text-xs text-rose-500 hover:text-rose-700">✕</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

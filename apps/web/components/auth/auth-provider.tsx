@@ -125,4 +125,7 @@ function EntraAuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <MsalProvider instance={msalInstance}>
-      <AuthGate>{children}</
+      <AuthGate>{children}</AuthGate>
+    </MsalProvider>
+  );
+}
