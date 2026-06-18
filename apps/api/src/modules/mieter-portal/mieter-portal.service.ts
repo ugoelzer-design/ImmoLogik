@@ -8,12 +8,16 @@ import { randomBytes } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Vertrag } from '@prisma/client';
 import type { Response } from 'express';
+import { MinioService } from '../documents/minio.service';
 
 const PORTAL_TOKEN_DAYS = 90;
 
 @Injectable()
 export class MieterPortalService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly minio: MinioService,
+  ) {}
 
   // ── Verwalter: Portal-Zugang erstellen / erneuern ─────────────────────────
 
@@ -155,15 +159,21 @@ export class MieterPortalService {
       throw new ForbiddenException('Portal-Link ungültig oder abgelaufen.');
     }
 
+    const mieter = await this.prisma.mieter.findUnique({
+      where: { id: access.mieterId },
+      select: { objectId: true, rentUnitId: true },
+    });
+
+    if (!mieter) {
+      throw new NotFoundException('Mieter nicht gefunden.');
+    }
+
     const doc = await this.prisma.document.findFirst({
       where: {
         id: documentId,
         appTenantId: access.appTenantId,
-        objectId: {
-          in: await this.prisma.mieter
-            .findUnique({ where: { id: access.mieterId }, select: { objectId: true } })
-            .then((m) => (m ? [m.objectId] : [])),
-        },
+        objectId: mieter.objectId,
+        rentUnitId: mieter.rentUnitId,
       },
     });
 
@@ -171,13 +181,8 @@ export class MieterPortalService {
       throw new NotFoundException('Dokument nicht gefunden oder kein Zugriff.');
     }
 
-    // MinIO / S3 — storageKey verwenden
-    const minioEndpoint = process.env.S3_ENDPOINT ?? 'http://minio:9000';
-    const bucket = process.env.S3_BUCKET ?? 'immologik';
-    const fileUrl = `${minioEndpoint}/${bucket}/${doc.storageKey}`;
-
-    const fileResponse = await fetch(fileUrl);
-    if (!fileResponse.ok || !fileResponse.body) {
+    const fileStream = await this.minio.getFileStream(doc.storageKey);
+    if (!fileStream) {
       throw new NotFoundException('Datei nicht abrufbar.');
     }
 
@@ -186,9 +191,7 @@ export class MieterPortalService {
       'Content-Disposition': `inline; filename="${encodeURIComponent(doc.fileName)}"`,
     });
 
-    const { Readable } = await import('stream');
-    const readable = Readable.fromWeb(fileResponse.body as import('stream/web').ReadableStream);
-    return new StreamableFile(readable);
+    return new StreamableFile(fileStream);
   }
 
   // ── Hilfsmethoden ─────────────────────────────────────────────────────────
