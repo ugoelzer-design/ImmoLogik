@@ -1,3 +1,5 @@
+import { getAccessToken } from "@/lib/auth/token-provider";
+
 type QueryValue = string | number | boolean | null | undefined;
 
 type RequestOptions = RequestInit & {
@@ -50,9 +52,24 @@ function buildUrl(path: string, query?: Record<string, QueryValue>) {
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { query, headers, ...init } = options;
   const requestHeaders = new Headers(headers ?? undefined);
+  const isBrowser = typeof window !== "undefined";
 
   if (init.body !== undefined && !requestHeaders.has("Content-Type")) {
     requestHeaders.set("Content-Type", "application/json");
+  }
+
+  if (!requestHeaders.has("Authorization")) {
+    const accessToken = isBrowser ? await getAccessToken() : null;
+    if (accessToken) {
+      requestHeaders.set("Authorization", `Bearer ${accessToken}`);
+    }
+  }
+
+  if (!isBrowser && process.env.API_INTERNAL_AUTH_TOKEN?.trim()) {
+    requestHeaders.set(
+      "x-internal-auth-token",
+      process.env.API_INTERNAL_AUTH_TOKEN.trim(),
+    );
   }
 
   const response = await fetch(buildUrl(path, query), {
@@ -64,6 +81,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   if (!response.ok) {
     const message = await response.text();
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(message || `Nicht autorisiert (${response.status})`);
+    }
     throw new Error(message || `API request failed with status ${response.status}`);
   }
 

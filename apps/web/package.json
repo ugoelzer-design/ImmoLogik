@@ -10,6 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@azure/msal-browser": "^5.14.0",
+    "@azure/msal-react": "^5.4.5",
     "lucide-react": "^0.577.0",
     "next": "16.1.6",
     "react": "19.2.3",

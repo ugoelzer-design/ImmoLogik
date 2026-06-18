@@ -81,6 +81,12 @@ export class AuthGuard implements CanActivate {
     }
 
     if (authMode === 'entra') {
+      const internalUser = this.tryCreateInternalUser(request);
+      if (internalUser) {
+        request.user = internalUser;
+        return true;
+      }
+
       const authHeader = request.headers['authorization'];
 
       if (!authHeader?.startsWith('Bearer ')) {
@@ -260,6 +266,36 @@ export class AuthGuard implements CanActivate {
       displayName: process.env.DEV_USER_NAME?.trim() || 'Development User',
       roles: ['ADMIN'],
       appTenantSlug: process.env.DEV_TENANT_SLUG?.trim() || 'default',
+    };
+  }
+
+  private tryCreateInternalUser(request: Request): AuthenticatedUser | null {
+    const expectedToken = process.env.API_INTERNAL_AUTH_TOKEN?.trim();
+    const providedToken = request.headers['x-internal-auth-token'];
+
+    if (
+      !expectedToken ||
+      typeof providedToken !== 'string' ||
+      providedToken !== expectedToken
+    ) {
+      return null;
+    }
+
+    return {
+      externalId: process.env.INTERNAL_USER_ID?.trim() || 'internal-web',
+      email:
+        process.env.INTERNAL_USER_EMAIL?.trim() ||
+        process.env.DEV_USER_EMAIL?.trim() ||
+        'admin@immologik.local',
+      displayName:
+        process.env.INTERNAL_USER_NAME?.trim() ||
+        process.env.DEV_USER_NAME?.trim() ||
+        'Immologik Web',
+      roles: ['ADMIN'],
+      appTenantSlug:
+        process.env.INTERNAL_TENANT_SLUG?.trim() ||
+        process.env.DEV_TENANT_SLUG?.trim() ||
+        'default',
     };
   }
 

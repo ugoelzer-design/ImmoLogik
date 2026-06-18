@@ -19,9 +19,12 @@ function createJwt(payload: object, privateKey: object, kid = 'test-kid') {
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
 
-function createContext(authorization?: string) {
+function createContext(authorization?: string, headers?: Record<string, string>) {
   const request = {
-    headers: authorization ? { authorization } : {},
+    headers: {
+      ...(authorization ? { authorization } : {}),
+      ...(headers ?? {}),
+    },
   };
 
   return {
@@ -130,6 +133,25 @@ describe('AuthGuard', () => {
         email: 'erika@example.com',
         displayName: 'Erika Beispiel',
         roles: ['ADMIN'],
+        appTenantSlug: 'default',
+      },
+    });
+  });
+
+  it('allows trusted internal web requests in entra auth mode', async () => {
+    process.env.API_INTERNAL_AUTH_TOKEN = 'internal-secret';
+    process.env.INTERNAL_USER_EMAIL = 'admin@immologik.local';
+    process.env.INTERNAL_TENANT_SLUG = 'default';
+    const guard = new AuthGuard(reflector, prisma);
+    const { context, request } = createContext(undefined, {
+      'x-internal-auth-token': 'internal-secret',
+    });
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(request).toMatchObject({
+      user: {
+        externalId: 'internal-web',
+        email: 'admin@immologik.local',
         appTenantSlug: 'default',
       },
     });
