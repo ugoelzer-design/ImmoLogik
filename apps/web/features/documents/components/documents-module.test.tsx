@@ -98,7 +98,7 @@ describe("DocumentsModule", () => {
 
     render(<DocumentsModule initialDocuments={[baseDocument]} objects={objects} rentUnits={rentUnits} />);
 
-    expect(screen.getByRole("heading", { name: "Dokumente" })).toBeInTheDocument();
+    expect(screen.getByText("Dokumente")).toBeInTheDocument();
     expect(screen.getByText("2.0 KB")).toBeInTheDocument();
     expect(screen.getByText("1 von 1 Dokumenten")).toBeInTheDocument();
 
@@ -213,7 +213,7 @@ describe("DocumentsModule", () => {
       });
     });
 
-    expect(screen.getAllByText("Nebenkosten 2025 fehlt")[0]).toBeInTheDocument();
+    expect(screen.getByText("Nebenkosten 2025 fehlt")).toBeInTheDocument();
   });
 
   it("loads a missing download url on demand and opens the document", async () => {
@@ -273,54 +273,6 @@ describe("DocumentsModule", () => {
     expect(screen.getByText("Offene Punkte")).toBeInTheDocument();
     expect(screen.getByText("Dokument wartet auf Prüfung")).toBeInTheDocument();
     expect(screen.getAllByText("Datei fehlt in der Ablage")[0]).toBeInTheDocument();
-  });
-
-  it("offers clickable status and category overview filters", async () => {
-    getDocumentsMock.mockResolvedValueOnce([baseDocument, secondDocument]);
-
-    render(<DocumentsModule initialDocuments={[baseDocument, secondDocument]} objects={objects} rentUnits={rentUnits} />);
-
-    const statusOverview = screen.getByText("Status-Überblick").closest("div.rounded-2xl");
-    expect(statusOverview).not.toBeNull();
-    fireEvent.click(within(statusOverview as HTMLElement).getByRole("button", { name: /Vorhanden/ }));
-
-    await waitFor(() => {
-      expect(getDocumentsMock).toHaveBeenLastCalledWith({
-        status: "Vorhanden",
-      });
-    });
-
-    expect(screen.getByText("Status: Vorhanden")).toBeInTheDocument();
-
-    getDocumentsMock.mockResolvedValueOnce([secondDocument]);
-    const categoryOverview = screen.getByText("Kategorie-Überblick").closest("div.rounded-2xl");
-    expect(categoryOverview).not.toBeNull();
-    fireEvent.click(within(categoryOverview as HTMLElement).getByRole("button", { name: /Nebenkostenabrechnung/ }));
-
-    await waitFor(() => {
-      expect(getDocumentsMock).toHaveBeenLastCalledWith({
-        category: "Nebenkostenabrechnung",
-        status: "Vorhanden",
-      });
-    });
-
-    expect(screen.getByText("Kategorie: Nebenkostenabrechnung")).toBeInTheDocument();
-  });
-
-  it("surfaces prioritized document cases from the visible list", () => {
-    render(<DocumentsModule initialDocuments={[{
-      ...baseDocument,
-      id: "doc-missing-priority",
-      title: "Jahresreport fehlt",
-      status: "Fehlt",
-      fileAvailable: false,
-      actionState: "file_missing",
-      openIssues: ["Datei fehlt in der Ablage"],
-    }]} objects={objects} rentUnits={rentUnits} />);
-
-    expect(screen.getByText("Priorität")).toBeInTheDocument();
-    expect(screen.getAllByText("Jahresreport fehlt")[0]).toBeInTheDocument();
-    expect(screen.getAllByText("Datei fehlt")[0]).toBeInTheDocument();
   });
 
   it("allows attaching a physical file to an existing missing document", async () => {

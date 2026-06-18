@@ -146,47 +146,6 @@ function sortDocuments(items: ImmoDocument[]) {
   });
 }
 
-function getDocumentCaseWeight(doc: ImmoDocument) {
-  if (doc.fileAvailable === false || doc.actionState === "file_missing") {
-    return 4;
-  }
-
-  if (doc.actionState === "assignment_missing") {
-    return 3;
-  }
-
-  if (doc.status === "Fehlt" || doc.actionState === "status_missing") {
-    return 2;
-  }
-
-  if (doc.status === "In Prüfung" || doc.actionState === "review_pending") {
-    return 1;
-  }
-
-  return 0;
-}
-
-function getDocumentCaseLabel(doc: ImmoDocument) {
-  const actionState = getDocumentActionState(doc);
-  if (actionState) {
-    return getActionStateLabel(actionState);
-  }
-
-  if (doc.fileAvailable === false) {
-    return "Datei fehlt";
-  }
-
-  if (doc.status === "Fehlt") {
-    return "Status Fehlt";
-  }
-
-  if (doc.status === "In Prüfung") {
-    return "In Prüfung";
-  }
-
-  return "Offen";
-}
-
 type DocumentEditForm = {
   id: string;
   title: string;
@@ -243,11 +202,6 @@ type DocumentActionState =
 
 type ActionStateSummary = {
   key: DocumentActionState;
-  label: string;
-  value: number;
-};
-
-type SimpleSummary = {
   label: string;
   value: number;
 };
@@ -730,31 +684,6 @@ export function DocumentsModule({ initialDocuments, objects, rentUnits, initialF
   const countPruefung = documents.filter((d) => d.status === "In Prüfung").length;
   const countFehlt = documents.filter((d) => d.status === "Fehlt").length;
   const countMissingFiles = documents.filter((d) => d.fileAvailable === false).length;
-  const assignedCount = documents.filter((d) => d.objectId || d.rentUnitId).length;
-  const visibleOpenCases = filtered.filter((doc) => getDocumentCaseWeight(doc) > 0);
-  const priorityDocumentCases = [...visibleOpenCases]
-    .sort((left, right) => {
-      const weightDifference = getDocumentCaseWeight(right) - getDocumentCaseWeight(left);
-      if (weightDifference !== 0) {
-        return weightDifference;
-      }
-
-      return getDocumentSortTimestamp(right.updatedAt) - getDocumentSortTimestamp(left.updatedAt);
-    })
-    .slice(0, 3);
-  const statusSummaries: SimpleSummary[] = STATUSES.map((status) => ({
-    label: status,
-    value: documents.filter((doc) => doc.status === status).length,
-  }));
-  const categorySummaries: SimpleSummary[] = Array.from(
-    documents.reduce((summary, doc) => {
-      summary.set(doc.category, (summary.get(doc.category) ?? 0) + 1);
-      return summary;
-    }, new Map<string, number>()),
-    ([label, value]) => ({ label, value }),
-  )
-    .sort((left, right) => right.value - left.value || left.label.localeCompare(right.label, "de"))
-    .slice(0, 6);
   const actionStateSummaries: ActionStateSummary[] = [
     {
       key: "file_missing",
@@ -1195,72 +1124,16 @@ export function DocumentsModule({ initialDocuments, objects, rentUnits, initialF
 
       <div className="grid gap-4 sm:grid-cols-4">
         {[
-          { label: "Bestand", value: documents.length },
-          { label: "Sichtbar", value: filtered.length },
+          { label: "Gesamt", value: documents.length },
           { label: "Gesamtgröße", value: formatBytes(totalSize) },
-          { label: "Zugeordnet", value: assignedCount },
+          { label: "In Prüfung", value: countPruefung },
+          { label: "Fehlt", value: countFehlt },
         ].map((s) => (
           <div key={s.label} className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-zinc-500">{s.label}</p>
             <p className="mt-2 text-2xl font-semibold text-zinc-900">{s.value}</p>
           </div>
         ))}
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
-        <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-zinc-900">Status-Überblick</h3>
-            <span className="text-xs text-zinc-500">{countPruefung + countFehlt} offen</span>
-          </div>
-          <div className="mt-4 grid gap-2">
-            {statusSummaries.map((entry) => (
-              <button
-                key={entry.label}
-                type="button"
-                onClick={() => setStatusFilter(entry.label)}
-                className={`flex items-center justify-between rounded-xl border px-3 py-2 text-left text-sm transition ${
-                  statusFilter === entry.label
-                    ? "border-zinc-900 bg-zinc-900 text-white"
-                    : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:border-zinc-300 hover:bg-white"
-                }`}
-              >
-                <span>{entry.label}</span>
-                <span className="font-semibold">{entry.value}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-zinc-900">Kategorie-Überblick</h3>
-            <span className="text-xs text-zinc-500">Top Kategorien</span>
-          </div>
-          {categorySummaries.length === 0 ? (
-            <p className="mt-4 rounded-xl border border-dashed border-zinc-200 px-3 py-4 text-sm text-zinc-500">
-              Noch keine Kategorien im Bestand.
-            </p>
-          ) : (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {categorySummaries.map((entry) => (
-                <button
-                  key={entry.label}
-                  type="button"
-                  onClick={() => setCatFilter(entry.label)}
-                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition ${
-                    catFilter === entry.label
-                      ? "border-zinc-900 bg-zinc-900 text-white"
-                      : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:border-zinc-300 hover:bg-white"
-                  }`}
-                >
-                  <span>{entry.label}</span>
-                  <span className="font-semibold">{entry.value}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
 
       <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
@@ -1302,25 +1175,6 @@ export function DocumentsModule({ initialDocuments, objects, rentUnits, initialF
             </button>
           ))}
         </div>
-        {priorityDocumentCases.length > 0 ? (
-          <div className="mt-4 border-t border-zinc-100 pt-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Priorität</p>
-            <div className="mt-3 grid gap-2 lg:grid-cols-3">
-              {priorityDocumentCases.map((doc) => (
-                <button
-                  key={doc.id}
-                  type="button"
-                  onClick={() => setExpandedDocumentId(doc.id)}
-                  className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-3 text-left transition hover:border-zinc-300 hover:bg-white"
-                >
-                  <p className="truncate text-sm font-medium text-zinc-900">{doc.title}</p>
-                  <p className="mt-1 text-xs text-zinc-500">{getDocumentCaseLabel(doc)}</p>
-                  <p className="mt-1 truncate text-xs text-zinc-400">{getObjectDisplay(doc)} / {getUnitDisplay(doc)}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
       </div>
 
       {countMissingFiles > 0 ? (
@@ -1522,52 +1376,50 @@ export function DocumentsModule({ initialDocuments, objects, rentUnits, initialF
         </div>
       )}
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-8">
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Suche nach Titel, Objekt-ID, Wohnung oder Jahr..." className="rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400 xl:col-span-2" />
-          <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)} className="rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400">
-            <option value="ALLE">Alle Kategorien</option>
-            {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-          </select>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400">
-            <option value="ALLE">Alle Status</option>
-            {STATUSES.map((s) => <option key={s}>{s}</option>)}
-          </select>
-          <select value={fileStateFilter} onChange={(e) => setFileStateFilter(e.target.value)} className="rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400">
-            <option value="ALLE">Alle Ablagen</option>
-            <option value="DATEI_VORHANDEN">Datei vorhanden</option>
-            <option value="DATEI_FEHLT">Datei fehlt</option>
-          </select>
-          <select value={actionStateFilter} onChange={(e) => setActionStateFilter(e.target.value)} className="rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400">
-            <option value="ALLE">Alle offenen Fälle</option>
-            <option value="file_missing">Datei fehlt</option>
-            <option value="assignment_missing">Zuordnung fehlt</option>
-            <option value="review_pending">In Prüfung</option>
-            <option value="status_missing">Status Fehlt</option>
-          </select>
-          <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} className="rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400">
-            <option value="ALLE">Alle Jahre</option>
-            {availableReportYears.map((year) => <option key={year} value={String(year)}>{year}</option>)}
-          </select>
-          <select value={objectFilter} onChange={(e) => setObjectFilter(e.target.value)} className="rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400">
-            <option value="ALLE">Alle Objekte</option>
-            {objects.map((o) => <option key={o.id} value={o.id}>{o.displayId} · {o.name}</option>)}
-          </select>
-          <select value={unitFilter} onChange={(e) => setUnitFilter(e.target.value)} className="rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400">
-            <option value="ALLE">Alle Einheiten</option>
-            {filterUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.unitLabel}</option>)}
-          </select>
-        </div>
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <p className="text-xs text-zinc-500">Suche und Filter laufen bei aktiver Eingabe gemeinsam ueber den API-Pfad.</p>
-          <button
-            type="button"
-            onClick={resetFilters}
-            className="rounded-xl border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-900"
-          >
-            Filter zuruecksetzen
-          </button>
-        </div>
+      <div className="grid gap-4 sm:grid-cols-7">
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Suche nach Titel, Objekt-ID, Wohnung oder Jahr..." className="rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400" />
+        <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)} className="rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400">
+          <option value="ALLE">Alle Kategorien</option>
+          {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+        </select>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400">
+          <option value="ALLE">Alle Status</option>
+          {STATUSES.map((s) => <option key={s}>{s}</option>)}
+        </select>
+        <select value={fileStateFilter} onChange={(e) => setFileStateFilter(e.target.value)} className="rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400">
+          <option value="ALLE">Alle Ablagen</option>
+          <option value="DATEI_VORHANDEN">Datei vorhanden</option>
+          <option value="DATEI_FEHLT">Datei fehlt</option>
+        </select>
+        <select value={actionStateFilter} onChange={(e) => setActionStateFilter(e.target.value)} className="rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400">
+          <option value="ALLE">Alle offenen Fälle</option>
+          <option value="file_missing">Datei fehlt</option>
+          <option value="assignment_missing">Zuordnung fehlt</option>
+          <option value="review_pending">In Prüfung</option>
+          <option value="status_missing">Status Fehlt</option>
+        </select>
+        <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} className="rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400">
+          <option value="ALLE">Alle Jahre</option>
+          {availableReportYears.map((year) => <option key={year} value={String(year)}>{year}</option>)}
+        </select>
+        <select value={objectFilter} onChange={(e) => setObjectFilter(e.target.value)} className="rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400">
+          <option value="ALLE">Alle Objekte</option>
+          {objects.map((o) => <option key={o.id} value={o.id}>{o.displayId} · {o.name}</option>)}
+        </select>
+        <select value={unitFilter} onChange={(e) => setUnitFilter(e.target.value)} className="rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400">
+          <option value="ALLE">Alle Einheiten</option>
+          {filterUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.unitLabel}</option>)}
+        </select>
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-zinc-500">Suche und Filter laufen bei aktiver Eingabe gemeinsam ueber den API-Pfad.</p>
+        <button
+          type="button"
+          onClick={resetFilters}
+          className="rounded-xl border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-900"
+        >
+          Filter zuruecksetzen
+        </button>
       </div>
       {activeFilterSummary.length > 0 && (
         <div className="flex flex-wrap gap-2">
@@ -1601,8 +1453,8 @@ export function DocumentsModule({ initialDocuments, objects, rentUnits, initialF
           <div>Dokument</div><div>WEG / Wohnung</div><div>Jahr</div><div>Kategorie</div><div>Status</div><div>Aktionen</div>
         </div>
         {filtered.length === 0 ? (
-          <div className="px-4 py-10">
-            <p className="text-sm font-medium text-zinc-800">
+          <div className="px-4 py-8">
+            <p className="text-sm text-zinc-700">
               {activeFilterSummary.length > 0
                 ? "Keine Dokumente passen zur aktuellen Suche oder Filterkombination."
                 : "Noch keine Dokumente vorhanden."}
@@ -1612,24 +1464,6 @@ export function DocumentsModule({ initialDocuments, objects, rentUnits, initialF
                 ? "Pruefe die aktiven Filter oder setze sie gesammelt zurueck."
                 : "Lege das erste Dokument direkt ueber den Upload an."}
             </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {activeFilterSummary.length > 0 ? (
-                <button
-                  type="button"
-                  onClick={resetFilters}
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-900"
-                >
-                  Filter zurücksetzen
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={openUploadForm}
-                className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-500"
-              >
-                Neues Dokument erfassen
-              </button>
-            </div>
           </div>
         ) : filtered.map((doc) => {
           const detailsExpanded = expandedDocumentId === doc.id;
