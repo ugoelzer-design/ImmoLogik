@@ -49,6 +49,9 @@ export class RentUnitsService {
       data: {
         appTenantId,
         ...dto,
+        designation: dto.designation ?? dto.unitLabel,
+        area: dto.area ?? 0,
+        status: dto.status ?? 'frei',
         istMiete: dto.istMiete ?? 0,
         zahlungsStatus: dto.zahlungsStatus ?? 'Offen',
       },

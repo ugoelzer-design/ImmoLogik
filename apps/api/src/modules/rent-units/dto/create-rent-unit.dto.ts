@@ -25,9 +25,25 @@ export class CreateRentUnitDto {
   @MaxLength(100)
   unitLabel: string;
 
+  @ApiPropertyOptional({ example: 'Wohnung links', description: 'Anzeigename der Einheit' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  designation?: string;
+
+  @ApiPropertyOptional({ example: 72.5, description: 'Wohnfläche in m²' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  area?: number;
+
+  @ApiPropertyOptional({ example: 'frei', description: 'Status der Einheit' })
+  @IsOptional()
+  @IsIn(['frei', 'vermietet', 'reserviert', 'inaktiv'])
+  status?: string;
+
   @ApiProperty({ example: 'Max Mustermann', description: 'Name des Mieters' })
   @IsString()
-  @IsNotEmpty()
   @MaxLength(200)
   tenant: string;
 

@@ -5,6 +5,9 @@ export type RentUnit = {
   id: string;
   objectId: string;
   unitLabel: string;
+  designation?: string;
+  area?: number;
+  status?: string;
   tenant: string;
   sollMiete: number;
   istMiete: number;
@@ -15,6 +18,9 @@ export type RentUnit = {
 export type CreateRentUnitInput = {
   objectId: string;
   unitLabel: string;
+  designation?: string;
+  area?: number;
+  status?: string;
   tenant: string;
   sollMiete: number;
   istMiete?: number;
@@ -32,6 +38,10 @@ export async function getRentUnits(): Promise<RentUnit[]> {
 
 export async function createRentUnit(input: CreateRentUnitInput): Promise<RentUnit> {
   return apiClient.post<RentUnit, CreateRentUnitInput>(apiEndpoints.rentUnits.list, input);
+}
+
+export async function updateRentUnit(id: string, input: Partial<CreateRentUnitInput>): Promise<RentUnit> {
+  return apiClient.patch<RentUnit, Partial<CreateRentUnitInput>>(apiEndpoints.rentUnits.detail(id), input);
 }
 
 export async function deleteRentUnit(id: string): Promise<void> {

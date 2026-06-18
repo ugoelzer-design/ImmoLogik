@@ -10,7 +10,12 @@ import {
 } from "react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { createMissingDocument } from "@/features/documents/services/documents.service";
-import type { RentUnit } from "@/features/finances/services/rent-units.service";
+import {
+  createRentUnit,
+  deleteRentUnit,
+  updateRentUnit,
+  type RentUnit,
+} from "@/features/finances/services/rent-units.service";
 import type { UtilityStatementsWorkspaceSettlement } from "@/features/finances/services/utility-statements.service";
 import {
   buildDocumentRequirements,
@@ -730,6 +735,10 @@ function getApartmentStatusClasses(status: ApartmentStatusValue) {
     default:
       return "border border-zinc-200 bg-zinc-100 text-zinc-600";
   }
+}
+
+function isApartmentStatusValue(value?: string): value is ApartmentStatusValue {
+  return APARTMENT_STATUS_OPTIONS.some((option) => option.value === value);
 }
 
 function isApartmentDesignationOption(value: string) {
@@ -5569,13 +5578,20 @@ function normalizeObjectDetailState(
 
 function mapRentUnitsToApartments(rentUnits: RentUnit[]): LocalApartment[] {
   return rentUnits
-    .map((rentUnit): LocalApartment => ({
-      id: rentUnit.id,
-      unitLabel: rentUnit.unitLabel,
-      designation: rentUnit.unitLabel,
-      area: "0",
-      status: rentUnit.tenant.trim() === "" ? "frei" : "vermietet",
-    }))
+    .map((rentUnit): LocalApartment => {
+      const status = rentUnit.status;
+      return {
+        id: rentUnit.id,
+        unitLabel: rentUnit.unitLabel,
+        designation: rentUnit.designation?.trim() || rentUnit.unitLabel,
+        area: String(rentUnit.area ?? 0),
+        status: isApartmentStatusValue(status)
+          ? status
+          : rentUnit.tenant.trim() === ""
+            ? "frei"
+            : "vermietet",
+      };
+    })
     .sort((left, right) =>
       left.unitLabel.localeCompare(right.unitLabel, "de", {
         numeric: true,
@@ -5793,6 +5809,9 @@ export function ObjectDetail({
   const [createdMissingDocuments, setCreatedMissingDocuments] = useState<ImmoDocument[]>([]);
   const [creatingRequirementKey, setCreatingRequirementKey] = useState<string | null>(null);
   const [requirementActionError, setRequirementActionError] = useState<string | null>(null);
+  const [createdRentUnits, setCreatedRentUnits] = useState<RentUnit[]>([]);
+  const [updatedRentUnitsById, setUpdatedRentUnitsById] = useState<Record<string, RentUnit>>({});
+  const [deletedRentUnitIds, setDeletedRentUnitIds] = useState<string[]>([]);
   const [hasLoadedStorage, setHasLoadedStorage] = useState(false);
   const [apartmentsByObject, setApartmentsByObject] = useState<
     Record<string, LocalApartment[]>
@@ -5812,6 +5831,9 @@ export function ObjectDetail({
     setCreatedMissingDocuments([]);
     setCreatingRequirementKey(null);
     setRequirementActionError(null);
+    setCreatedRentUnits([]);
+    setUpdatedRentUnitsById({});
+    setDeletedRentUnitIds([]);
   }, [object?.id]);
 
   useEffect(() => {
@@ -5840,7 +5862,10 @@ export function ObjectDetail({
     ? contracts.filter((contract) => contract.objectId === objectKey)
     : [];
   const objectRentUnits = objectKey
-    ? rentUnits.filter((rentUnit) => rentUnit.objectId === objectKey)
+    ? [...rentUnits, ...createdRentUnits]
+        .filter((rentUnit) => rentUnit.objectId === objectKey)
+        .filter((rentUnit) => !deletedRentUnitIds.includes(rentUnit.id))
+        .map((rentUnit) => updatedRentUnitsById[rentUnit.id] ?? rentUnit)
     : [];
   const objectReadingCampaigns = objectKey
     ? readingCampaigns.filter((campaign) => campaign.objectId === objectKey)
@@ -5986,30 +6011,63 @@ export function ObjectDetail({
     writeStorageRecord(OBJECT_MODULE_STORAGE_KEYS.utilities, nextUtilitiesRecord);
   }
 
-  function handleCreateApartment(draft: ApartmentDraft) {
+  async function handleCreateApartment(draft: ApartmentDraft) {
     if (draft.status === "") {
       return;
     }
 
     const nextNumber = getNextApartmentNumber(apartments);
-    const newApartment: LocalApartment = {
-      id: formatApartmentInternalId(objectKey, nextNumber),
-      unitLabel: formatApartmentUnitLabel(nextNumber),
-      designation: draft.designation,
-      area: draft.area,
-      status: draft.status,
-    };
+    const unitLabel = formatApartmentUnitLabel(nextNumber);
 
-    persistCurrentObjectState({
-      apartments: [...apartments, newApartment],
-      tenancies,
-      meters,
-      utilities,
-    });
+    try {
+      const created = await createRentUnit({
+        objectId: objectKey,
+        unitLabel,
+        designation: draft.designation,
+        area: Number(draft.area),
+        status: draft.status,
+        tenant: "",
+        sollMiete: 0,
+        faelligAm: new Date().toISOString().slice(0, 10),
+      });
+      setCreatedRentUnits((current) => [...current, created]);
+    } catch {
+      const newApartment: LocalApartment = {
+        id: formatApartmentInternalId(objectKey, nextNumber),
+        unitLabel,
+        designation: draft.designation,
+        area: draft.area,
+        status: draft.status,
+      };
+
+      persistCurrentObjectState({
+        apartments: [...apartments, newApartment],
+        tenancies,
+        meters,
+        utilities,
+      });
+    }
   }
 
-  function handleUpdateApartment(apartmentId: string, draft: ApartmentDraft) {
+  async function handleUpdateApartment(apartmentId: string, draft: ApartmentDraft) {
     if (draft.status === "") {
+      return;
+    }
+
+    if (apiApartments.some((apartment) => apartment.id === apartmentId)) {
+      try {
+        const updated = await updateRentUnit(apartmentId, {
+          designation: draft.designation,
+          area: Number(draft.area),
+          status: draft.status,
+        });
+        setUpdatedRentUnitsById((current) => ({
+          ...current,
+          [apartmentId]: updated,
+        }));
+      } catch {
+        return;
+      }
       return;
     }
 
@@ -6032,7 +6090,17 @@ export function ObjectDetail({
     });
   }
 
-  function handleDeleteApartment(apartmentId: string) {
+  async function handleDeleteApartment(apartmentId: string) {
+    if (apiApartments.some((apartment) => apartment.id === apartmentId)) {
+      try {
+        await deleteRentUnit(apartmentId);
+        setDeletedRentUnitIds((current) => [...current, apartmentId]);
+      } catch {
+        return;
+      }
+      return;
+    }
+
     const meterIdsToRemove = meters
       .filter((meter) => meter.apartmentId === apartmentId)
       .map((meter) => meter.id);

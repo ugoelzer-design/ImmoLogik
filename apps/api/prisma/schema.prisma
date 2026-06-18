@@ -100,6 +100,9 @@ model RentUnit {
   appTenantId    String
   objectId       String
   unitLabel      String
+  designation    String         @default("")
+  area           Float          @default(0)
+  status         String         @default("frei")
   tenant         String
   sollMiete      Float
   istMiete       Float          @default(0)
