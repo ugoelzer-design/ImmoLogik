@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
+import { utilityStatementPeriodSchema } from "@/lib/validation/schemas";
 import type { NebenkostenAbrechnung } from "@/types/nebenkosten";
 import { currentDateForDisplay } from "../../utils/nebenkosten-format";
 
@@ -17,17 +18,31 @@ export function BearbeitenAbrechnungDialog({
 }) {
   const [zeitraumVon, setZeitraumVon] = useState("");
   const [zeitraumBis, setZeitraumBis] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!item) return;
     setZeitraumVon(item.zeitraumVon);
     setZeitraumBis(item.zeitraumBis);
+    setError(null);
   }, [item]);
 
   if (!open || !item) return null;
 
   function handleSave() {
     if (!item) return;
+    const validation = utilityStatementPeriodSchema.safeParse({
+      zeitraumVon,
+      zeitraumBis,
+    });
+
+    if (!validation.success) {
+      setError(
+        validation.error.issues[0]?.message ??
+          "Bitte alle Felder korrekt ausfüllen.",
+      );
+      return;
+    }
 
     const payload: NebenkostenAbrechnung = {
       id: item.id,
@@ -36,8 +51,8 @@ export function BearbeitenAbrechnungDialog({
       status: item.status,
       erstelltAm: item.erstelltAm,
       positivGeprueftAm: item.positivGeprueftAm,
-      zeitraumVon,
-      zeitraumBis,
+      zeitraumVon: validation.data.zeitraumVon,
+      zeitraumBis: validation.data.zeitraumBis,
       geaendertAm: currentDateForDisplay(),
     };
 
@@ -68,6 +83,12 @@ export function BearbeitenAbrechnungDialog({
         </div>
 
         <div className="grid gap-6 p-6 md:grid-cols-2">
+          {error ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 md:col-span-2">
+              {error}
+            </div>
+          ) : null}
+
           <label className="space-y-2">
             <span className="text-[11px] uppercase tracking-wide text-zinc-500">
               Zeitraum von

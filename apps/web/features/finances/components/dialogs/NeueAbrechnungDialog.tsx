@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useMemo, useState } from "react";
+import { newUtilityStatementSchema } from "@/lib/validation/schemas";
 import { formatDateForDisplay } from "../../utils/nebenkosten-format";
 import type {
   BeispielObjekt,
@@ -77,6 +78,7 @@ export function NeueAbrechnungDialog({
   const [selectedObjektDisplayId, setSelectedObjektDisplayId] = useState("");
   const [zeitraumVon, setZeitraumVon] = useState("");
   const [zeitraumBis, setZeitraumBis] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const selectedObjekt = useMemo(() => {
     return objekte.find((item) => item.displayId === selectedObjektDisplayId) ?? null;
@@ -91,22 +93,38 @@ export function NeueAbrechnungDialog({
     setSelectedObjektDisplayId("");
     setZeitraumVon("");
     setZeitraumBis("");
+    setError(null);
     onClose();
   }
 
   function handleCreate() {
-    if (!selectedObjekt || !canCreate) return;
+    const validation = newUtilityStatementSchema.safeParse({
+      objectDisplayId: selectedObjektDisplayId,
+      zeitraumVon,
+      zeitraumBis,
+    });
+
+    if (!validation.success) {
+      setError(
+        validation.error.issues[0]?.message ??
+          "Bitte alle Felder korrekt ausfüllen.",
+      );
+      return;
+    }
+
+    if (!selectedObjekt) return;
 
     onCreate({
       objektDisplayId: selectedObjekt.displayId,
       objektName: selectedObjekt.name,
-      zeitraumVon,
-      zeitraumBis,
+      zeitraumVon: validation.data.zeitraumVon,
+      zeitraumBis: validation.data.zeitraumBis,
     });
 
     setSelectedObjektDisplayId("");
     setZeitraumVon("");
     setZeitraumBis("");
+    setError(null);
   }
 
   if (!open) return null;
@@ -138,6 +156,12 @@ export function NeueAbrechnungDialog({
 
         <div className="grid gap-6 p-6 xl:grid-cols-[minmax(0,1.2fr)_380px]">
           <div className="space-y-6">
+            {error ? (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {error}
+              </div>
+            ) : null}
+
             <section className="rounded-2xl border border-zinc-200 bg-white p-5">
               <div className="flex items-center justify-between gap-4">
                 <div>

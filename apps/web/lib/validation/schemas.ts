@@ -150,3 +150,44 @@ export const tenantReadingSchema = z.object({
 });
 
 export type TenantReadingFormValues = z.infer<typeof tenantReadingSchema>;
+
+// ─── Nebenkostenabrechnung ──────────────────────────────────────────────────
+
+const utilityStatementPeriodShape = {
+    objectDisplayId: z.string().trim().optional(),
+    zeitraumVon: isoDateString("Zeitraum von"),
+    zeitraumBis: isoDateString("Zeitraum bis"),
+};
+
+export const utilityStatementPeriodSchema = z
+  .object(utilityStatementPeriodShape)
+  .refine(
+    (data) =>
+      !data.zeitraumVon ||
+      !data.zeitraumBis ||
+      new Date(data.zeitraumBis) >= new Date(data.zeitraumVon),
+    {
+      message: "Zeitraum bis darf nicht vor Zeitraum von liegen.",
+      path: ["zeitraumBis"],
+    },
+  );
+
+export const newUtilityStatementSchema = z
+  .object({
+    ...utilityStatementPeriodShape,
+    objectDisplayId: requiredString("Objekt"),
+  })
+  .refine(
+    (data) =>
+      !data.zeitraumVon ||
+      !data.zeitraumBis ||
+      new Date(data.zeitraumBis) >= new Date(data.zeitraumVon),
+    {
+      message: "Zeitraum bis darf nicht vor Zeitraum von liegen.",
+      path: ["zeitraumBis"],
+    },
+  );
+
+export type NewUtilityStatementFormValues = z.infer<
+  typeof newUtilityStatementSchema
+>;
