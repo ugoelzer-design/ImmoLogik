@@ -5951,22 +5951,28 @@ export function ObjectDetail({
 
   function persistCurrentObjectState(nextState: ObjectDetailLocalState) {
     const normalizedState = normalizeObjectDetailState(nextState);
+    const apiApartmentIds = new Set(apiApartments.map((apartment) => apartment.id));
+    const apiTenancyIds = new Set(apiTenancies.map((tenancy) => tenancy.id));
+    const apiMeterIds = new Set(apiMeters.map((meter) => meter.id));
+    const apiUtilityIds = new Set(apiUtilities.map((utility) => utility.id));
 
     const nextApartmentsRecord = getNextRecordForObject(
       apartmentsByObject,
-      normalizedState.apartments,
+      normalizedState.apartments.filter(
+        (apartment) => !apiApartmentIds.has(apartment.id),
+      ),
     );
     const nextTenanciesRecord = getNextRecordForObject(
       tenanciesByObject,
-      normalizedState.tenancies,
+      normalizedState.tenancies.filter((tenancy) => !apiTenancyIds.has(tenancy.id)),
     );
     const nextMetersRecord = getNextRecordForObject(
       metersByObject,
-      normalizedState.meters,
+      normalizedState.meters.filter((meter) => !apiMeterIds.has(meter.id)),
     );
     const nextUtilitiesRecord = getNextUtilitiesRecordForObject(
       utilitiesByObject,
-      normalizedState.utilities,
+      normalizedState.utilities.filter((utility) => !apiUtilityIds.has(utility.id)),
     );
 
     setApartmentsByObject(nextApartmentsRecord);
