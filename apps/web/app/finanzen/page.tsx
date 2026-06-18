@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getDocuments } from "../../features/documents/services/documents.service";
+import { BankkontoModule } from "../../features/finances/components/BankkontoModule";
 import { NebenkostenAbrechnungen } from "../../features/finances/components/NebenkostenAbrechnungen";
 import { NebenkostenOverview } from "../../features/finances/components/NebenkostenOverview";
 import { MietuebersichtModule } from "../../features/finances/components/MietuebersichtModule";
@@ -21,15 +22,6 @@ function SubNavButton({ label, active, onClick }: { label: string; active: boole
     <button type="button" onClick={onClick} className={["rounded-xl border px-4 py-2.5 text-sm transition", active ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50"].join(" ")}>
       {label}
     </button>
-  );
-}
-
-function PlaceholderCard({ title, text }: { title: string; text: string }) {
-  return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-      <p className="text-[11px] uppercase tracking-wide text-zinc-500">{title}</p>
-      <p className="mt-3 text-sm leading-6 text-zinc-700">{text}</p>
-    </div>
   );
 }
 
@@ -90,13 +82,7 @@ export default function FinanzenPage() {
             </div>
           ) : null}
 
-          {activeSection === "bankkonto" ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <PlaceholderCard title="Status" text="Bereich vorbereitet. Kontologik, Bewegungen und Zuordnung werden später ergänzt." />
-              <PlaceholderCard title="Später" text="Hier kann später die Übersicht zu Konten, Buchungszeilen und Zuordnungsstatus je WEG entstehen." />
-              <PlaceholderCard title="Hinweis" text="In diesem Schritt bleibt Bankkonto bewusst nur ein sauberer Platzhalter innerhalb der Finanzstruktur." />
-            </div>
-          ) : null}
+          {activeSection === "bankkonto" ? <BankkontoModule /> : null}
         </div>
       </div>
     </section>
