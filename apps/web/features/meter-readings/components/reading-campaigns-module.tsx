@@ -199,16 +199,4 @@ export function ReadingCampaignsModule({
                         onClick={() => handleCopy(accessLink)}
                         className="inline-flex h-10 items-center justify-center rounded-xl bg-white px-3 text-sm font-medium text-zinc-700 ring-1 ring-zinc-200 transition hover:bg-zinc-100"
                       >
-                        Link kopieren
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </SectionCard>
-        ))}
-      </div>
-    </section>
-  );
-}
+                        Link kopi

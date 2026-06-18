@@ -1,6 +1,11 @@
 import { apiClient } from "@/lib/api/client";
 import { apiEndpoints } from "@/lib/api/endpoints";
 import type { ImmoObject } from "@/types/object";
+import type {
+  ObjectModuleApartment,
+  ObjectModuleTenancy,
+  ObjectModuleUtility,
+} from "@/features/finances/utils/nebenkosten-calc";
 
 export type CreateObjectInput = {
   name: string;
@@ -49,9 +54,4 @@ export async function getNextObjectDisplayId(): Promise<string> {
     apiEndpoints.objects.nextDisplayId,
   );
 
-  return normalizeDisplayId(preview.displayId);
-}
-
-export async function deleteObject(id: string): Promise<void> {
-  await apiClient.del<void>(apiEndpoints.objects.detail(id));
-}
+  return normalizeDisplayId(preview.displ

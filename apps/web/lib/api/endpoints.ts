@@ -3,6 +3,7 @@ export const apiEndpoints = {
     list: "/objects",
     nextDisplayId: "/objects/next-display-id",
     detail: (id: string) => `/objects/${id}`,
+    moduleData: (id: string) => `/objects/${id}/module-data`,
   },
   documents: {
     list: "/documents",
@@ -35,6 +36,4 @@ export const apiEndpoints = {
     meters: "/meter-readings/meters",
     campaigns: "/meter-readings/campaigns",
     access: (token: string) => `/meter-readings/access/${token}`,
-    submit: (token: string) => `/meter-readings/access/${token}/readings`,
-  },
-};
+    submit: (token: s

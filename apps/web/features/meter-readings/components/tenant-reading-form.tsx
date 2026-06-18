@@ -166,18 +166,3 @@ export function TenantReadingForm({ initialAccess }: TenantReadingFormProps) {
                 </div>
               ))}
             </div>
-
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={saving}
-              className="inline-flex h-11 items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {saving ? "Speichere..." : "Zählerstände absenden"}
-            </button>
-          </div>
-        </section>
-      </div>
-    </main>
-  );
-}

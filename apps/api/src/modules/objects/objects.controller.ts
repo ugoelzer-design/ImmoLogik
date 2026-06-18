@@ -36,6 +36,14 @@ export class ObjectsController {
     return this.objectsService.getNextDisplayIdPreview(user?.appTenantSlug);
   }
 
+  @Get(':id/module-data')
+  getModuleData(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ) {
+    return this.objectsService.getModuleData(id, user?.appTenantSlug);
+  }
+
   @Get(':id')
   findOne(
     @Param('id') id: string,
@@ -49,14 +57,4 @@ export class ObjectsController {
     @Body() createObjectDto: CreateObjectDto,
     @CurrentUser() user: AuthenticatedUser | undefined,
   ) {
-    return this.objectsService.create(createObjectDto, user?.appTenantSlug);
-  }
-
-  @Delete(':id')
-  remove(
-    @Param('id') id: string,
-    @CurrentUser() user: AuthenticatedUser | undefined,
-  ) {
-    return this.objectsService.remove(id, user?.appTenantSlug);
-  }
-}
+    return this.objectsService.create(createObjectDto, user?

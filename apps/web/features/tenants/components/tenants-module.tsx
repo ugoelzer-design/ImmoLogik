@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { RentUnit } from "@/features/finances/services/rent-units.service";
 import { createTenant, deleteTenant, updateTenant } from "@/features/tenants/services/tenants.service";
+import { createPortalAccess } from "@/features/mieter-portal/services/mieter-portal.service";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -94,6 +95,35 @@ export function TenantsModule({ tenants: initialTenants, objects, rentUnits, doc
   const [form, setForm] = useState<TenantFormState>(emptyForm);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Portal-Link-State: mieterId → { token, expiresAt } | "loading" | null
+  const [portalLinks, setPortalLinks] = useState<
+    Record<string, { token: string; expiresAt: string } | "loading">
+  >({});
+
+  async function handleGeneratePortalLink(mieterId: string) {
+    setPortalLinks((prev) => ({ ...prev, [mieterId]: "loading" }));
+    try {
+      const result = await createPortalAccess(mieterId);
+      setPortalLinks((prev) => ({
+        ...prev,
+        [mieterId]: { token: result.token, expiresAt: result.expiresAt },
+      }));
+    } catch {
+      setPortalLinks((prev) => {
+        const next = { ...prev };
+        delete next[mieterId];
+        return next;
+      });
+    }
+  }
+
+  function buildPortalUrl(token: string) {
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}/portal/${token}`;
+    }
+    return `/portal/${token}`;
+  }
 
   const stats = useMemo(
     () => ({
@@ -487,30 +517,4 @@ export function TenantsModule({ tenants: initialTenants, objects, rentUnits, doc
                       href={buildTenantContractDocumentsHref(item)}
                       className="text-xs font-medium text-blue-700 hover:text-blue-900"
                     >
-                      Mietvertrag
-                    </Link>
-                    <Link
-                      href={buildTenantDocumentsHref(item)}
-                      className="text-xs font-medium text-blue-700 hover:text-blue-900"
-                    >
-                      Alle Unterlagen
-                    </Link>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-zinc-200 bg-white p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-zinc-500">Mieterzugang</p>
-                  <p className="mt-2 text-sm font-medium text-zinc-900">{accessState}</p>
-                  <p className="mt-1 text-xs text-zinc-500">
-                    Stammdaten, Vertrag, Dokumente und Ablesungen als künftiger Self-Service.
-                  </p>
-                </div>
-              </div>
-            </article>
-          );
-          })}
-        </div>
-      </SectionCard>
-    </section>
-  );
-}
+    

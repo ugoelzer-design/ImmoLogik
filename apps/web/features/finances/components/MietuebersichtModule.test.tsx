@@ -98,17 +98,4 @@ describe("MietuebersichtModule", () => {
     expect(screen.getByText("WE 01")).toBeInTheDocument();
   });
 
-  it("blocks invalid rent unit values before calling the api", async () => {
-    getRentUnitsMock.mockResolvedValueOnce([]);
-
-    render(<MietuebersichtModule />);
-
-    expect(await screen.findByText("Keine Einheiten vorhanden.")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "+ Einheit anlegen" }));
-    fireEvent.click(screen.getByRole("button", { name: "Speichern" }));
-
-    expect(await screen.findByText("Objekt-ID ist erforderlich.")).toBeInTheDocument();
-    expect(createRentUnitMock).not.toHaveBeenCalled();
-  });
-});
+  i

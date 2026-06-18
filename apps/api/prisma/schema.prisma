@@ -24,7 +24,8 @@ model Tenant {
   meterReadings   MeterReading[]
   readingCampaigns ReadingCampaign[]
   readingAccess   ReadingAccess[]
-  utilityStatements UtilityStatement[]
+  utilityStatements  UtilityStatement[]
+  mieterPortalAccess MieterPortalAccess[]
 }
 
 model User {
@@ -136,14 +137,31 @@ model Mieter {
   appTenant  Tenant         @relation(fields: [appTenantId], references: [id], onDelete: Restrict)
   object     PropertyObject @relation(fields: [objectId], references: [id], onDelete: Restrict)
   rentUnit   RentUnit       @relation(fields: [rentUnitId], references: [id], onDelete: Restrict)
-  vertraege  Vertrag[]
+  vertraege     Vertrag[]
   readingAccess ReadingAccess[]
+  portalAccess  MieterPortalAccess?
 
   @@index([appTenantId])
   @@index([objectId])
   @@index([rentUnitId])
   @@unique([objectId, rentUnitId])
   @@map("mieter")
+}
+
+model MieterPortalAccess {
+  id          String   @id @default(cuid())
+  appTenantId String
+  mieterId    String   @unique
+  token       String   @unique
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  appTenant   Tenant   @relation(fields: [appTenantId], references: [id], onDelete: Restrict)
+  mieter      Mieter   @relation(fields: [mieterId], references: [id], onDelete: Cascade)
+
+  @@index([appTenantId])
+  @@index([token])
+  @@map("mieter_portal_access")
 }
 
 model Vertrag {
@@ -274,23 +292,4 @@ model UtilityStatement {
   status              String          @default("In Arbeit")
   settlementCreatedOn String
   settlementUpdatedOn String
-  approvedOn          String?
-  positions           Json
-  units               Json
-  finalReportSnapshot Json?
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
-  appTenant           Tenant          @relation(fields: [appTenantId], references: [id], onDelete: Restrict)
-  object              PropertyObject? @relation(fields: [objectId], references: [id], onDelete: SetNull)
-
-  @@index([appTenantId])
-  @@index([objectId])
-  @@index([objectDisplayId])
-  @@index([reportYear])
-  @@map("utility_statements")
-}
-
-enum InternalRole {
-  ADMIN
-  EMPLOYEE
-}
+  approv

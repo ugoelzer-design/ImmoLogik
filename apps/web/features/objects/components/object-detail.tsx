@@ -32,6 +32,10 @@ import type { ImmoDocument } from "@/types/document";
 import type { MeterDefinition, ReadingCampaign } from "@/types/meter-reading";
 import type { ImmoObject } from "@/types/object";
 import type { Tenant } from "@/types/tenant";
+import {
+  objectDetailMeterReadingSchema,
+  objectDetailTenancySchema,
+} from "@/lib/validation/schemas";
 import { kostenarten } from "../../shared/kostenarten";
 
 type ObjectDetailProps = {
@@ -624,46 +628,25 @@ function isValidDateInputValue(dateValue: string) {
   );
 }
 
-function isValidPersonsValue(persons: string) {
-  const personsNumber = Number(persons);
-
-  return (
-    persons.trim() !== "" &&
-    Number.isInteger(personsNumber) &&
-    personsNumber > 0
-  );
-}
-
 function getValidatedTenancyDraft(
   apartmentId: string,
   draft: TenancyDraft,
   tenancies: LocalTenancy[],
   options?: { ignoreTenancyId?: string | null },
 ): TenancyDraft | null {
-  const tenantName = draft.tenantName.trim();
-  const startDate = draft.startDate.trim();
-  const endDate = draft.endDate.trim();
-  const persons = draft.persons.trim();
+  const validation = objectDetailTenancySchema.safeParse({
+    apartmentId,
+    tenantName: draft.tenantName,
+    startDate: draft.startDate,
+    endDate: draft.endDate,
+    persons: draft.persons,
+  });
 
-  if (apartmentId.trim() === "" || tenantName === "") {
+  if (!validation.success) {
     return null;
   }
 
-  if (!isValidDateInputValue(startDate)) {
-    return null;
-  }
-
-  if (endDate !== "" && !isValidDateInputValue(endDate)) {
-    return null;
-  }
-
-  if (endDate !== "" && endDate < startDate) {
-    return null;
-  }
-
-  if (!isValidPersonsValue(persons)) {
-    return null;
-  }
+  const { startDate, endDate, tenantName, persons } = validation.data;
 
   const hasDateOverlap = tenancies.some((tenancy) => {
     if (tenancy.apartmentId !== apartmentId) {
@@ -1242,22 +1225,15 @@ function hasStoredMeterNumberConflict(
 function normalizeMeterReadingDraft(
   draft: MeterReadingDraft,
 ): MeterReadingDraft | null {
-  const date = draft.date.trim();
-  const reader = draft.reader.trim();
-  const valueNumber = Number(draft.value);
-
-  if (!isValidDateInputValue(date)) {
-    return null;
-  }
-
-  if (!Number.isFinite(valueNumber) || valueNumber < 0) {
+  const validation = objectDetailMeterReadingSchema.safeParse(draft);
+  if (!validation.success) {
     return null;
   }
 
   return {
-    date,
-    value: String(valueNumber),
-    reader,
+    date: validation.data.date,
+    value: String(Number(validation.data.value)),
+    reader: validation.data.reader,
   };
 }
 
@@ -6681,3 +6657,4 @@ export function ObjectDetail({
     </section>
   );
 }
+                                                                                                                                                                                                                                                                                                                                                                        

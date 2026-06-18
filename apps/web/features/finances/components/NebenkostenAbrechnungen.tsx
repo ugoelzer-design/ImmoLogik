@@ -24,18 +24,14 @@ import {
   normalizeLookupValue,
   parseDecimalString,
 } from "../utils/nebenkosten-calc";
-import {
-  OBJECT_MODULE_STORAGE_KEYS,
-  isFinalReportFreigegeben,
-  readStorageRecord,
-} from "../utils/nebenkosten-storage";
+import { isFinalReportFreigegeben } from "../utils/nebenkosten-storage";
 import { beispielAbrechnungen } from "../data/nebenkosten";
 import { kostenarten } from "../../shared/kostenarten";
 import { BearbeitenAbrechnungDialog } from "./dialogs/BearbeitenAbrechnungDialog";
 import { NeueAbrechnungDialog } from "./dialogs/NeueAbrechnungDialog";
 import { StatusPill } from "./shared/StatusPill";
 import { currentDateForDisplay } from "../utils/nebenkosten-format";
-import { getObjects } from "../../objects/services/objects.service";
+import { getObjects, getObjectModuleData } from "../../objects/services/objects.service";
 import {
   approveUtilityStatement,
   getUtilityStatementValidation,
@@ -2243,17 +2239,42 @@ export function NebenkostenAbrechnungen({ documents }: NebenkostenAbrechnungenPr
   ]);
 
   useEffect(() => {
-    setObjectApartmentsByStorageId(
-      readStorageRecord<ObjectModuleApartment>(OBJECT_MODULE_STORAGE_KEYS.apartments),
-    );
-    setObjectTenanciesByStorageId(
-      readStorageRecord<ObjectModuleTenancy>(OBJECT_MODULE_STORAGE_KEYS.tenancies),
-    );
-    setObjectUtilitiesByStorageId(
-      readStorageRecord<ObjectModuleUtility>(OBJECT_MODULE_STORAGE_KEYS.utilities),
-    );
-    setHasLoadedObjectModule(true);
-  }, []);
+    if (bekannteObjekte.length === 0) return;
+
+    let isCancelled = false;
+
+    async function loadModuleData() {
+      const results = await Promise.allSettled(
+        bekannteObjekte.map((obj) => getObjectModuleData(obj.id)),
+      );
+
+      if (isCancelled) return;
+
+      const apartments: Record<string, ObjectModuleApartment[]> = {};
+      const tenancies: Record<string, ObjectModuleTenancy[]> = {};
+      const utilities: Record<string, ObjectModuleUtility[]> = {};
+
+      results.forEach((result, idx) => {
+        if (result.status !== "fulfilled") return;
+        const objectId = bekannteObjekte[idx].id;
+        const data = result.value;
+        apartments[objectId] = data.apartments;
+        tenancies[objectId] = data.tenancies;
+        utilities[objectId] = data.utilities;
+      });
+
+      setObjectApartmentsByStorageId(apartments);
+      setObjectTenanciesByStorageId(tenancies);
+      setObjectUtilitiesByStorageId(utilities);
+      setHasLoadedObjectModule(true);
+    }
+
+    void loadModuleData();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [bekannteObjekte]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -3977,27 +3998,4 @@ export function NebenkostenAbrechnungen({ documents }: NebenkostenAbrechnungenPr
           </label>
         </div>
 
-        <div className="mt-6 flex flex-wrap gap-2">
-          <StatusPill tone="dark">{gefilterteAbrechnungen.length} Treffer</StatusPill>
-          <StatusPill tone="amber">{countInArbeit} In Arbeit</StatusPill>
-          <StatusPill>{countArchiviert} Archiviert</StatusPill>
-        </div>
-      </section>
-
-      <NeueAbrechnungDialog
-        open={dialogOpen}
-        objekte={auswahlObjekte}
-        onClose={() => setDialogOpen(false)}
-        onCreate={handleCreate}
-      />
-
-      <BearbeitenAbrechnungDialog
-        open={bearbeitenOpen}
-        item={abrechnungZumBearbeiten}
-        onClose={handleCloseEdit}
-        onSave={handleSaveEdit}
-      />
-    </div>
-  );
-
-}
+        <div className="mt-6 flex flex-wr
