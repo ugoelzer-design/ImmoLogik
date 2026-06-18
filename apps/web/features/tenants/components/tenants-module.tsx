@@ -567,6 +567,7 @@ export function TenantsModule({ tenants: initialTenants, objects, rentUnits, doc
                     }
                     return (
                       <div className="mt-2 space-y-2">
+                        <p className="text-xs font-medium text-zinc-700">{accessState}</p>
                         <p className="text-xs text-zinc-500">
                           {accessState === "E-Mail fehlt"
                             ? "E-Mail hinterlegen, um Portal-Link zu generieren."

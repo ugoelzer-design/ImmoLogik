@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type {
   PortalData,
   PortalDokument,
@@ -63,12 +63,43 @@ function ablesungStatusColor(status: string) {
   }
 }
 
+function documentStatusColor(status: string) {
+  switch (status) {
+    case "Vorhanden": return "bg-emerald-100 text-emerald-800";
+    case "In Prüfung": return "bg-amber-100 text-amber-800";
+    case "Fehlt": return "bg-rose-100 text-rose-800";
+    default: return "bg-zinc-100 text-zinc-600";
+  }
+}
+
+function EmptyState({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-zinc-300 bg-white p-6 text-center">
+      <p className="text-sm font-semibold text-zinc-900">{title}</p>
+      <p className="mt-1 text-sm text-zinc-500">{text}</p>
+    </div>
+  );
+}
+
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 
 function UebersichtTab({ data, token }: { data: PortalData; token: string }) {
   const { mieter, portalAccess } = data;
+  const openReadings = data.ablesungen.filter(
+    (item) => item.status === "offen" && item.meinZugang?.status === "offen",
+  ).length;
+
   return (
     <div className="space-y-6">
+      <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+          Ihr Bereich
+        </p>
+        <p className="mt-2 text-sm text-blue-900">
+          Hier finden Sie Ihre Stammdaten, Vertragsinformationen, Dokumente und offene Ablesungen.
+        </p>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <InfoCard label="Name" value={mieter.fullName} />
         <InfoCard label="E-Mail" value={mieter.email} />
@@ -91,6 +122,12 @@ function UebersichtTab({ data, token }: { data: PortalData; token: string }) {
         <InfoCard label="Fällig am" value={mieter.faelligAm} />
       </div>
 
+      <div className="grid gap-4 sm:grid-cols-3">
+        <InfoCard label="Verträge" value={String(data.vertraege.length)} />
+        <InfoCard label="Dokumente" value={String(data.dokumente.length)} />
+        <InfoCard label="Offene Ablesungen" value={String(openReadings)} />
+      </div>
+
       <p className="text-xs text-zinc-400">
         Portal-Zugang gültig bis {formatDate(portalAccess.expiresAt)}
       </p>
@@ -100,7 +137,12 @@ function UebersichtTab({ data, token }: { data: PortalData; token: string }) {
 
 function VertragTab({ vertraege }: { vertraege: PortalVertrag[] }) {
   if (vertraege.length === 0) {
-    return <p className="text-sm text-zinc-500">Kein Vertrag hinterlegt.</p>;
+    return (
+      <EmptyState
+        title="Kein Vertrag hinterlegt"
+        text="Sobald ein Vertrag freigegeben ist, erscheint er hier."
+      />
+    );
   }
   return (
     <div className="space-y-4">
@@ -128,31 +170,61 @@ function DokumenteTab({
   dokumente: PortalDokument[];
   token: string;
 }) {
+  const groupedDocuments = useMemo(() => {
+    return dokumente.reduce<Record<string, PortalDokument[]>>((groups, doc) => {
+      const key = doc.category || "Sonstiges";
+      return {
+        ...groups,
+        [key]: [...(groups[key] ?? []), doc],
+      };
+    }, {});
+  }, [dokumente]);
+
   if (dokumente.length === 0) {
-    return <p className="text-sm text-zinc-500">Keine Dokumente vorhanden.</p>;
+    return (
+      <EmptyState
+        title="Keine Dokumente vorhanden"
+        text="Freigegebene Dokumente werden hier automatisch angezeigt."
+      />
+    );
   }
+
   return (
-    <div className="space-y-3">
-      {dokumente.map((doc) => (
-        <div
-          key={doc.id}
-          className="flex items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4"
-        >
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-zinc-900">{doc.title}</p>
-            <p className="mt-0.5 text-xs text-zinc-500">
-              {doc.category} · {formatBytes(doc.size)} · {formatDate(doc.createdAt)}
-            </p>
+    <div className="space-y-5">
+      {Object.entries(groupedDocuments).map(([category, items]) => (
+        <section key={category} className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-zinc-900">{category}</h2>
+            <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">
+              {items.length}
+            </span>
           </div>
-          <a
-            href={getDocumentFileUrl(token, doc.id)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100"
-          >
-            Öffnen
-          </a>
-        </div>
+
+          {items.map((doc) => (
+            <div
+              key={doc.id}
+              className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-zinc-900">{doc.title}</p>
+                <p className="mt-0.5 text-xs text-zinc-500">
+                  {doc.fileName} · {formatBytes(doc.size)} · {formatDate(doc.createdAt)}
+                </p>
+                <div className="mt-2">
+                  <StatusChip label={doc.status} color={documentStatusColor(doc.status)} />
+                </div>
+              </div>
+              <a
+                href={getDocumentFileUrl(token, doc.id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-center text-xs font-medium text-zinc-700 transition hover:bg-zinc-100"
+              >
+                Öffnen
+              </a>
+            </div>
+          ))}
+        </section>
       ))}
     </div>
   );
@@ -160,7 +232,12 @@ function DokumenteTab({
 
 function AblesungenTab({ ablesungen }: { ablesungen: PortalAblesung[] }) {
   if (ablesungen.length === 0) {
-    return <p className="text-sm text-zinc-500">Keine Ablesekampagnen vorhanden.</p>;
+    return (
+      <EmptyState
+        title="Keine Ablesungen vorhanden"
+        text="Wenn eine Jahresablesung freigegeben wird, erscheint sie hier."
+      />
+    );
   }
   return (
     <div className="space-y-4">
@@ -203,6 +280,11 @@ function AblesungenTab({ ablesungen }: { ablesungen: PortalAblesung[] }) {
             )}
             {isExpired && (
               <p className="mt-3 text-xs text-rose-600">Abgabefrist abgelaufen.</p>
+            )}
+            {!zugang && (
+              <p className="mt-3 text-xs text-zinc-500">
+                Für diese Kampagne ist aktuell kein Zugang hinterlegt.
+              </p>
             )}
           </div>
         );
