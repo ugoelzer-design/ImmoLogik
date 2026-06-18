@@ -8,6 +8,7 @@ import { ContractsModule } from './modules/contracts/contracts.module';
 import { MeterReadingsModule } from './modules/meter-readings/meter-readings.module';
 import { UtilityStatementsModule } from './modules/utility-statements/utility-statements.module';
 import { AuthModule } from './auth/auth.module';
+import { GlobalRateLimitMiddleware } from './common/global-rate-limit.middleware';
 import { RequestLoggingMiddleware } from './common/request-logging.middleware';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -29,6 +30,8 @@ import { AppService } from './app.service';
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(RequestLoggingMiddleware).forRoutes('*');
+    consumer
+      .apply(RequestLoggingMiddleware, GlobalRateLimitMiddleware)
+      .forRoutes('*');
   }
 }
