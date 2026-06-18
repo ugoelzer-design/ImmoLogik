@@ -36,9 +36,11 @@ describe("MietuebersichtModule", () => {
     render(<MietuebersichtModule />);
 
     expect(await screen.findByText("WE 01")).toBeInTheDocument();
-    expect(screen.getByText("Soll-Miete").nextElementSibling).toHaveTextContent("1200.00 €");
-    expect(screen.getByText("Ist-Miete").nextElementSibling).toHaveTextContent("1000.00 €");
-    expect(screen.getAllByText("Rückstand")[0]?.nextElementSibling).toHaveTextContent("200.00 €");
+    expect(screen.getByText("Soll-Miete").nextElementSibling).toHaveTextContent("1.200,00 €");
+    expect(screen.getByText("Ist-Miete").nextElementSibling).toHaveTextContent("1.000,00 €");
+    expect(screen.getAllByText("Rückstand")[0]?.nextElementSibling).toHaveTextContent("200,00 €");
+    expect(screen.getByText("Klärung").nextElementSibling).toHaveTextContent("1");
+    expect(screen.getByText("1 mit Differenz")).toBeInTheDocument();
   });
 
   it("creates a new rent unit from the form", async () => {
@@ -60,13 +62,12 @@ describe("MietuebersichtModule", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "+ Einheit anlegen" }));
 
-    const inputs = screen.getAllByRole("textbox");
-    fireEvent.change(inputs[0], { target: { value: "obj-2" } });
-    fireEvent.change(inputs[1], { target: { value: "WE 02" } });
-    fireEvent.change(inputs[2], { target: { value: "Bernd Klein" } });
-    fireEvent.change(inputs[3], { target: { value: "950" } });
-    fireEvent.change(inputs[4], { target: { value: "0" } });
-    fireEvent.change(inputs[5], { target: { value: "2026-05-01" } });
+    fireEvent.change(screen.getByLabelText("Objekt-ID"), { target: { value: "obj-2" } });
+    fireEvent.change(screen.getByLabelText("Einheit"), { target: { value: "WE 02" } });
+    fireEvent.change(screen.getByLabelText("Mieter"), { target: { value: "Bernd Klein" } });
+    fireEvent.change(screen.getByLabelText("Soll-Miete"), { target: { value: "950" } });
+    fireEvent.change(screen.getByLabelText("Ist-Miete"), { target: { value: "0" } });
+    fireEvent.change(screen.getByLabelText("Fällig am"), { target: { value: "2026-05-01" } });
 
     fireEvent.click(screen.getByRole("button", { name: "Speichern" }));
 
@@ -92,7 +93,7 @@ describe("MietuebersichtModule", () => {
     render(<MietuebersichtModule />);
 
     expect(await screen.findByText("WE 01")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "✕" }));
+    fireEvent.click(screen.getByRole("button", { name: "WE 01 löschen" }));
 
     expect(await screen.findByText("Mieteinheit konnte nicht gelöscht werden.")).toBeInTheDocument();
     expect(screen.getByText("WE 01")).toBeInTheDocument();
@@ -110,5 +111,37 @@ describe("MietuebersichtModule", () => {
 
     expect(await screen.findByText("Objekt-ID ist erforderlich.")).toBeInTheDocument();
     expect(createRentUnitMock).not.toHaveBeenCalled();
+  });
+
+  it("filters rent units by search text and payment status", async () => {
+    getRentUnitsMock.mockResolvedValueOnce([
+      existingUnit,
+      {
+        ...existingUnit,
+        id: "unit-2",
+        unitLabel: "WE 02",
+        tenant: "Bernd Klein",
+        zahlungsStatus: "Bezahlt",
+        istMiete: 1200,
+      },
+    ]);
+
+    render(<MietuebersichtModule />);
+
+    expect(await screen.findByText("WE 01")).toBeInTheDocument();
+    expect(screen.getByText("WE 02")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Mieteinheiten suchen"), {
+      target: { value: "Bernd" },
+    });
+
+    expect(screen.queryByText("WE 01")).not.toBeInTheDocument();
+    expect(screen.getByText("WE 02")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Zahlungsstatus filtern"), {
+      target: { value: "Rückstand" },
+    });
+
+    expect(screen.getByText("Keine Mieteinheiten passen zur Suche.")).toBeInTheDocument();
   });
 });
